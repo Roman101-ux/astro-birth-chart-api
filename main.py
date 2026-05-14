@@ -31,18 +31,39 @@ def root():
 def calculate_birth_chart(data: BirthData):
 
     location_query = f"{data.birth_place}, {data.country}"
-    location = geolocator.geocode(location_query)
+        fallback_locations = {
+        "tschuj,kyrgyzstan": {
+            "latitude": 42.7483142,
+            "longitude": 75.0421531,
+            "timezone": "Asia/Bishkek"
+        },
+        "chuy,kyrgyzstan": {
+            "latitude": 42.7483142,
+            "longitude": 75.0421531,
+            "timezone": "Asia/Bishkek"
+        }
+    }
 
-    if not location:
+    location_key = f"{data.birth_place},{data.country}".lower().replace(" ", "")
+
+    try:
+        location = geolocator.geocode(location_query, timeout=10)
+    except Exception:
+        location = None
+
+    if location:
+        latitude = location.latitude
+        longitude = location.longitude
+        timezone_name = tf.timezone_at(lat=latitude, lng=longitude)
+    elif location_key in fallback_locations:
+        latitude = fallback_locations[location_key]["latitude"]
+        longitude = fallback_locations[location_key]["longitude"]
+        timezone_name = fallback_locations[location_key]["timezone"]
+    else:
         return {
             "success": False,
-            "error": "Location not found"
+            "error": "Location lookup failed. Please provide coordinates manually or use a more precise city/country."
         }
-
-    latitude = location.latitude
-    longitude = location.longitude
-
-    timezone_name = tf.timezone_at(lat=latitude, lng=longitude)
 
     if not timezone_name:
         return {
