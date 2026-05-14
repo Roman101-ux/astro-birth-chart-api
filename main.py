@@ -29,9 +29,9 @@ def root():
 
 @app.post("/calculate-birth-chart")
 def calculate_birth_chart(data: BirthData):
-
     location_query = f"{data.birth_place}, {data.country}"
-        fallback_locations = {
+
+    fallback_locations = {
         "tschuj,kyrgyzstan": {
             "latitude": 42.7483142,
             "longitude": 75.0421531,
@@ -88,6 +88,7 @@ def calculate_birth_chart(data: BirthData):
         utc_datetime.day,
         utc_datetime.hour + utc_datetime.minute / 60.0
     )
+
     zodiac_signs = [
         "Widder",
         "Stier",
@@ -119,7 +120,6 @@ def calculate_birth_chart(data: BirthData):
     planet_results = []
 
     for planet_name, planet_id in planets.items():
-
         planet_data = swe.calc_ut(julian_day, planet_id)[0]
 
         planet_longitude = planet_data[0]
@@ -151,37 +151,29 @@ def calculate_birth_chart(data: BirthData):
 
     return {
         "success": True,
-
         "input": {
             "birth_date": data.birth_date,
             "birth_time": data.birth_time,
             "birth_place": data.birth_place,
             "country": data.country
         },
-
         "coordinates": {
             "latitude": latitude,
             "longitude": longitude
         },
-
         "timezone": timezone_name,
-
         "utc_time": utc_datetime.isoformat(),
-
         "ascendant": {
             "sign": asc_sign,
             "degree": round(ascendant % 30, 2),
             "longitude": round(ascendant, 2)
         },
-
         "mc": {
             "sign": mc_sign,
             "degree": round(mc % 30, 2),
             "longitude": round(mc, 2)
         },
-
         "planets": planet_results,
-
         "houses": [
             round(house, 2)
             for house in houses
