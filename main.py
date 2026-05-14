@@ -5,11 +5,88 @@ from timezonefinder import TimezoneFinder
 from datetime import datetime
 import pytz
 import swisseph as swe
+import math
 
 app = FastAPI()
 
 geolocator = Nominatim(user_agent="astralytica")
 tf = TimezoneFinder()
+def zodiac_to_circle(longitude):
+    return math.radians(longitude - 90)
+
+
+def polar_to_cartesian(cx, cy, radius, angle_rad):
+    x = cx + radius * math.cos(angle_rad)
+    y = cy + radius * math.sin(angle_rad)
+    return x, y
+
+
+def generate_cosmogram_svg(planets):
+    size = 800
+    center = size / 2
+    outer_radius = 320
+    inner_radius = 260
+
+    svg = []
+
+    svg.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
+    )
+
+    svg.append(
+        f'<rect width="100%" height="100%" fill="white"/>'
+    )
+
+    svg.append(
+        f'<circle cx="{center}" cy="{center}" r="{outer_radius}" fill="none" stroke="black" stroke-width="2"/>'
+    )
+
+    svg.append(
+        f'<circle cx="{center}" cy="{center}" r="{inner_radius}" fill="none" stroke="black" stroke-width="1"/>'
+    )
+
+    for i in range(12):
+        angle = math.radians(i * 30 - 90)
+
+        x1, y1 = polar_to_cartesian(
+            center,
+            center,
+            inner_radius,
+            angle
+        )
+
+        x2, y2 = polar_to_cartesian(
+            center,
+            center,
+            outer_radius,
+            angle
+        )
+
+        svg.append(
+            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="black" stroke-width="1"/>'
+        )
+
+    for planet in planets:
+        angle = zodiac_to_circle(planet["longitude"])
+
+        px, py = polar_to_cartesian(
+            center,
+            center,
+            220,
+            angle
+        )
+
+        svg.append(
+            f'<circle cx="{px}" cy="{py}" r="6" fill="red"/>'
+        )
+
+        svg.append(
+            f'<text x="{px + 10}" y="{py}" font-size="14">{planet["planet"]}</text>'
+        )
+
+    svg.append("</svg>")
+
+    return "".join(svg)
 
 
 class BirthData(BaseModel):
@@ -148,6 +225,7 @@ def calculate_birth_chart(data: BirthData):
 
     asc_sign = zodiac_signs[int(ascendant // 30)]
     mc_sign = zodiac_signs[int(mc // 30)]
+    cosmogram_svg = generate_cosmogram_svg(planet_results)
 
     return {
         "success": True,
@@ -177,5 +255,6 @@ def calculate_birth_chart(data: BirthData):
         "houses": [
             round(house, 2)
             for house in houses
-        ]
+        ],
+        "cosmogram_svg": cosmogram_svg
     }
