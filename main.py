@@ -101,17 +101,17 @@ def calculate_birth_chart(data: BirthData):
 
         planet_data = swe.calc_ut(julian_day, planet_id)[0]
 
-        longitude = planet_data[0]
+        planet_longitude = planet_data[0]
         retrograde = planet_data[3] < 0
 
-        sign_index = int(longitude // 30)
-        degree = longitude % 30
+        sign_index = int(planet_longitude // 30)
+        degree = planet_longitude % 30
 
         planet_results.append({
             "planet": planet_name,
             "sign": zodiac_signs[sign_index],
             "degree": round(degree, 2),
-            "longitude": round(longitude, 2),
+            "longitude": round(planet_longitude, 2),
             "retrograde": retrograde
         })
 
