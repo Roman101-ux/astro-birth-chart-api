@@ -11,6 +11,8 @@ app = FastAPI()
 
 geolocator = Nominatim(user_agent="astralytica")
 tf = TimezoneFinder()
+
+
 def zodiac_to_circle(longitude):
     return math.radians(longitude - 90)
 
@@ -33,9 +35,7 @@ def generate_cosmogram_svg(planets):
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
     )
 
-    svg.append(
-        f'<rect width="100%" height="100%" fill="white"/>'
-    )
+    svg.append('<rect width="100%" height="100%" fill="white"/>')
 
     svg.append(
         f'<circle cx="{center}" cy="{center}" r="{outer_radius}" fill="none" stroke="black" stroke-width="2"/>'
@@ -48,19 +48,8 @@ def generate_cosmogram_svg(planets):
     for i in range(12):
         angle = math.radians(i * 30 - 90)
 
-        x1, y1 = polar_to_cartesian(
-            center,
-            center,
-            inner_radius,
-            angle
-        )
-
-        x2, y2 = polar_to_cartesian(
-            center,
-            center,
-            outer_radius,
-            angle
-        )
+        x1, y1 = polar_to_cartesian(center, center, inner_radius, angle)
+        x2, y2 = polar_to_cartesian(center, center, outer_radius, angle)
 
         svg.append(
             f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="black" stroke-width="1"/>'
@@ -68,18 +57,9 @@ def generate_cosmogram_svg(planets):
 
     for planet in planets:
         angle = zodiac_to_circle(planet["longitude"])
+        px, py = polar_to_cartesian(center, center, 220, angle)
 
-        px, py = polar_to_cartesian(
-            center,
-            center,
-            220,
-            angle
-        )
-
-        svg.append(
-            f'<circle cx="{px}" cy="{py}" r="6" fill="red"/>'
-        )
-
+        svg.append(f'<circle cx="{px}" cy="{py}" r="6" fill="red"/>')
         svg.append(
             f'<text x="{px + 10}" y="{py}" font-size="14">{planet["planet"]}</text>'
         )
@@ -225,6 +205,7 @@ def calculate_birth_chart(data: BirthData):
 
     asc_sign = zodiac_signs[int(ascendant // 30)]
     mc_sign = zodiac_signs[int(mc // 30)]
+
     cosmogram_svg = generate_cosmogram_svg(planet_results)
 
     return {
@@ -258,8 +239,9 @@ def calculate_birth_chart(data: BirthData):
         ],
         "cosmogram_svg": cosmogram_svg
     }
-    
-    @app.get("/cosmogram.svg")
+
+
+@app.get("/cosmogram.svg")
 def get_cosmogram_svg(
     birth_date: str,
     birth_time: str,
