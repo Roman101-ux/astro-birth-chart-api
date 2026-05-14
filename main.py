@@ -67,9 +67,6 @@ def calculate_birth_chart(data: BirthData):
         utc_datetime.day,
         utc_datetime.hour + utc_datetime.minute / 60.0
     )
-
-    sun_position = swe.calc_ut(julian_day, swe.SUN)[0][0]
-
     zodiac_signs = [
         "Widder",
         "Stier",
@@ -85,25 +82,87 @@ def calculate_birth_chart(data: BirthData):
         "Fische"
     ]
 
-    sign_index = int(sun_position // 30)
-    sign_degree = sun_position % 30
+    planets = {
+        "Sonne": swe.SUN,
+        "Mond": swe.MOON,
+        "Merkur": swe.MERCURY,
+        "Venus": swe.VENUS,
+        "Mars": swe.MARS,
+        "Jupiter": swe.JUPITER,
+        "Saturn": swe.SATURN,
+        "Uranus": swe.URANUS,
+        "Neptun": swe.NEPTUNE,
+        "Pluto": swe.PLUTO
+    }
+
+    planet_results = []
+
+    for planet_name, planet_id in planets.items():
+
+        planet_data = swe.calc_ut(julian_day, planet_id)[0]
+
+        longitude = planet_data[0]
+        retrograde = planet_data[3] < 0
+
+        sign_index = int(longitude // 30)
+        degree = longitude % 30
+
+        planet_results.append({
+            "planet": planet_name,
+            "sign": zodiac_signs[sign_index],
+            "degree": round(degree, 2),
+            "longitude": round(longitude, 2),
+            "retrograde": retrograde
+        })
+
+    houses, ascmc = swe.houses(
+        julian_day,
+        latitude,
+        longitude,
+        b'P'
+    )
+
+    ascendant = ascmc[0]
+    mc = ascmc[1]
+
+    asc_sign = zodiac_signs[int(ascendant // 30)]
+    mc_sign = zodiac_signs[int(mc // 30)]
 
     return {
         "success": True,
+
         "input": {
             "birth_date": data.birth_date,
             "birth_time": data.birth_time,
             "birth_place": data.birth_place,
             "country": data.country
         },
+
         "coordinates": {
             "latitude": latitude,
             "longitude": longitude
         },
+
         "timezone": timezone_name,
+
         "utc_time": utc_datetime.isoformat(),
-        "sun": {
-            "sign": zodiac_signs[sign_index],
-            "degree": round(sign_degree, 2)
-        }
+
+        "ascendant": {
+            "sign": asc_sign,
+            "degree": round(ascendant % 30, 2),
+            "longitude": round(ascendant, 2)
+        },
+
+        "mc": {
+            "sign": mc_sign,
+            "degree": round(mc % 30, 2),
+            "longitude": round(mc, 2)
+        },
+
+        "planets": planet_results,
+
+        "houses": [
+            round(house, 2)
+            for house in houses
+        ]
     }
