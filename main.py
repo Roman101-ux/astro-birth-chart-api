@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from pydantic import BaseModel
 from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
@@ -258,3 +258,30 @@ def calculate_birth_chart(data: BirthData):
         ],
         "cosmogram_svg": cosmogram_svg
     }
+    
+    @app.get("/cosmogram.svg")
+def get_cosmogram_svg(
+    birth_date: str,
+    birth_time: str,
+    birth_place: str,
+    country: str
+):
+    data = BirthData(
+        birth_date=birth_date,
+        birth_time=birth_time,
+        birth_place=birth_place,
+        country=country
+    )
+
+    result = calculate_birth_chart(data)
+
+    if not result.get("success"):
+        return Response(
+            content="<svg xmlns='http://www.w3.org/2000/svg'><text x='20' y='40'>Calculation failed</text></svg>",
+            media_type="image/svg+xml"
+        )
+
+    return Response(
+        content=result["cosmogram_svg"],
+        media_type="image/svg+xml"
+    )
