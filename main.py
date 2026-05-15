@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, List, Any
 from html import escape
 import pytz
 import swisseph as swe
@@ -43,11 +43,11 @@ PLANETS = {
 }
 
 ASPECTS = [
-    ("Konjunktion", 0, 8, "#777777"),
-    ("Sextil", 60, 5, "#4F8FE8"),
-    ("Quadrat", 90, 6, "#D85C5C"),
-    ("Trigon", 120, 6, "#4F8FE8"),
-    ("Opposition", 180, 8, "#C74747"),
+    ("Konjunktion", 0, 8, "#777777", 0.0),
+    ("Sextil", 60, 5, "#4F8FE8", 0.60),
+    ("Quadrat", 90, 6, "#D85C5C", 0.78),
+    ("Trigon", 120, 6, "#4F8FE8", 0.64),
+    ("Opposition", 180, 8, "#C74747", 0.82),
 ]
 
 AMBIGUOUS_PLACES = {
@@ -66,11 +66,11 @@ class BirthData(BaseModel):
     timezone: Optional[str] = None
 
 
-def norm_deg(x):
+def norm_deg(x: float) -> float:
     return x % 360
 
 
-def deg_to_dms(deg):
+def deg_to_dms(deg: float) -> str:
     d = int(deg)
     m = int(round((deg - d) * 60))
     if m == 60:
@@ -79,7 +79,7 @@ def deg_to_dms(deg):
     return f"{d}°{m:02d}'"
 
 
-def sign_data(longitude):
+def sign_data(longitude: float):
     lon = norm_deg(longitude)
     idx = int(lon // 30)
     degree = lon % 30
@@ -87,20 +87,20 @@ def sign_data(longitude):
     return idx, name, glyph, element, modality, degree
 
 
-def angle_for_longitude(longitude):
+def angle_for_longitude(longitude: float) -> float:
     return math.radians(180 - longitude)
 
 
-def polar(cx, cy, r, angle):
+def polar(cx: float, cy: float, r: float, angle: float):
     return cx + r * math.cos(angle), cy + r * math.sin(angle)
 
 
-def angular_diff(a, b):
+def angular_diff(a: float, b: float) -> float:
     d = abs(a - b) % 360
     return min(d, 360 - d)
 
 
-def point_on_arc(start, end, value):
+def point_on_arc(start: float, end: float, value: float) -> bool:
     start, end, value = norm_deg(start), norm_deg(end), norm_deg(value)
     if end < start:
         end += 360
@@ -109,14 +109,14 @@ def point_on_arc(start, end, value):
     return start <= value < end
 
 
-def find_house(longitude, houses):
+def find_house(longitude: float, houses: List[float]):
     for i in range(12):
         if point_on_arc(houses[i], houses[(i + 1) % 12], longitude):
             return i + 1
     return None
 
 
-def calculate_aspects(points):
+def calculate_aspects(points: Dict[str, float]) -> List[Dict[str, Any]]:
     aspects = []
     names = list(points.keys())
 
@@ -124,7 +124,7 @@ def calculate_aspects(points):
         for j in range(i + 1, len(names)):
             diff = angular_diff(points[names[i]], points[names[j]])
 
-            for aspect_name, exact, orb_limit, color in ASPECTS:
+            for aspect_name, exact, orb_limit, color, strength in ASPECTS:
                 orb = abs(diff - exact)
                 if orb <= orb_limit:
                     aspects.append({
@@ -134,13 +134,14 @@ def calculate_aspects(points):
                         "angle": round(diff, 2),
                         "orb": round(orb, 2),
                         "color": color,
+                        "strength": strength,
                     })
                     break
 
-    return sorted(aspects, key=lambda x: x["orb"])
+    return sorted(aspects, key=lambda x: (x["orb"], -x["strength"]))
 
 
-def safe_text(x):
+def safe_text(x) -> str:
     return escape(str(x))
 
 
@@ -207,8 +208,12 @@ def svg_pie(cx, cy, r, values, colors):
     return "".join(out)
 
 
-def spread_planets(planets, min_gap=8.0):
-    planets = sorted(planets, key=lambda p: p["longitude"])
+def clamp_label(x: float, y: float, min_x=12, max_x=1068, min_y=14, max_y=742):
+    return max(min_x, min(max_x, x)), max(min_y, min(max_y, y))
+
+
+def spread_planets(planets, min_gap=9.5):
+    planets_sorted = sorted(planets, key=lambda p: p["longitude"])
     result = []
     cluster = []
 
@@ -223,17 +228,21 @@ def spread_planets(planets, min_gap=8.0):
             result.append(p)
             return
 
-        center = sum(p["longitude"] for p in items) / len(items)
-        spread = min(42, max(22, len(items) * 8.5))
+        sx = sum(math.cos(math.radians(p["longitude"])) for p in items)
+        sy = sum(math.sin(math.radians(p["longitude"])) for p in items)
+        center = norm_deg(math.degrees(math.atan2(sy, sx)))
+
+        spread = min(46, max(24, len(items) * 9.0))
         start = center - spread / 2
+        radial_pattern = [0, 14, 7, 21, 28, 35]
 
         for idx, p in enumerate(items):
             q = p.copy()
             q["display_longitude"] = norm_deg(start + idx * (spread / max(len(items) - 1, 1)))
-            q["display_radius_offset"] = (idx % 3) * 12
+            q["display_radius_offset"] = radial_pattern[idx % len(radial_pattern)]
             result.append(q)
 
-    for p in planets:
+    for p in planets_sorted:
         if not cluster:
             cluster = [p]
             continue
@@ -243,6 +252,12 @@ def spread_planets(planets, min_gap=8.0):
         else:
             flush_cluster(cluster)
             cluster = [p]
+
+    if cluster and result:
+        first_long = result[0]["longitude"]
+        if angular_diff(cluster[-1]["longitude"], first_long) < min_gap:
+            cluster.extend(result[:1])
+            result = result[1:]
 
     flush_cluster(cluster)
     return result
@@ -260,13 +275,13 @@ def calculate_planet_position(julian_day, planet_id):
 def generate_professional_cosmogram_svg(chart):
     width, height = 1080, 760
 
-    cx, cy = 705, 298
+    cx, cy = 706, 302
 
-    outer = 238
-    zodiac_inner = 214
-    house_ring = 183
-    planet_ring = 166
-    aspect_ring = 120
+    outer = 236
+    zodiac_inner = 212
+    house_ring = 181
+    planet_ring = 167
+    aspect_ring = 122
 
     bg = "#f7f4ed"
     ink = "#171717"
@@ -302,14 +317,9 @@ def generate_professional_cosmogram_svg(chart):
     svg.append(svg_text(18, 46, "Geburtshoroskop", 10, fill=ink))
     svg.append(svg_text(18, 76, chart["display_birth"], 8))
     svg.append(svg_text(18, 90, chart["display_place"], 8))
-    svg.append(svg_text(
-        18,
-        104,
-        f'{chart["coordinates"]["latitude"]:.5f}° N / {chart["coordinates"]["longitude"]:.5f}° E',
-        8
-    ))
+    svg.append(svg_text(18, 104, f'{chart["coordinates"]["latitude"]:.5f}° N / {chart["coordinates"]["longitude"]:.5f}° E', 8))
 
-    svg.append(svg_circle(cx, cy, outer, stroke="#3d3d3d", width=1.45))
+    svg.append(svg_circle(cx, cy, outer, stroke="#333333", width=1.45))
     svg.append(svg_circle(cx, cy, zodiac_inner, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, house_ring, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, aspect_ring, stroke="#ddd5c7", width=0.65))
@@ -323,7 +333,7 @@ def generate_professional_cosmogram_svg(chart):
         svg.append(svg_line(x1, y1, x2, y2, grid, 0.8))
 
         mid = angle_for_longitude(lon + 15)
-        tx, ty = polar(cx, cy, 228, mid)
+        tx, ty = polar(cx, cy, 225, mid)
         svg.append(svg_symbol(tx, ty + 8, glyph, 23, fill=element_colors[element]))
 
     for d in range(360):
@@ -334,7 +344,6 @@ def generate_professional_cosmogram_svg(chart):
         svg.append(svg_line(x1, y1, x2, y2, "#c8c0b1", 0.35))
 
     houses = chart["houses_raw"]
-
     for i, cusp in enumerate(houses):
         angle = angle_for_longitude(cusp)
 
@@ -352,41 +361,38 @@ def generate_professional_cosmogram_svg(chart):
     asc = chart["ascendant"]["longitude"]
     mc = chart["mc"]["longitude"]
 
-    for label, lon in [
-        ("AC", asc),
-        ("DC", norm_deg(asc + 180)),
-        ("MC", mc),
-        ("IC", norm_deg(mc + 180)),
-    ]:
+    for label, lon in [("AC", asc), ("DC", norm_deg(asc + 180)), ("MC", mc), ("IC", norm_deg(mc + 180))]:
         angle = angle_for_longitude(lon)
 
         x1, y1 = polar(cx, cy, aspect_ring, angle)
-        x2, y2 = polar(cx, cy, outer + 4, angle)
-        tx, ty = polar(cx, cy, outer + 16, angle)
+        x2, y2 = polar(cx, cy, outer + 3, angle)
+        tx, ty = polar(cx, cy, outer + 14, angle)
+        tx, ty = clamp_label(tx, ty, min_y=12, max_y=748)
 
-        svg.append(svg_line(x1, y1, x2, y2, "#111", 1.25))
+        svg.append(svg_line(x1, y1, x2, y2, "#111", 1.22))
         svg.append(svg_text(tx, ty + 4, label, 9.5, anchor="middle", weight="700", fill="#111"))
 
     planet_positions = {p["planet"]: p["longitude"] for p in chart["planets"]}
+    visual_aspects = [a for a in chart["aspects"] if a["aspect"] != "Konjunktion"][:14]
 
-    for idx, asp in enumerate(chart["aspects"]):
-        if asp["aspect"] == "Konjunktion":
-            continue
-
+    for idx, asp in enumerate(visual_aspects):
         lon1 = planet_positions[asp["p1"]]
         lon2 = planet_positions[asp["p2"]]
 
         a1 = angle_for_longitude(lon1)
         a2 = angle_for_longitude(lon2)
 
-        offset = (idx % 5) * 1.5
-        r1 = aspect_ring - offset
-        r2 = aspect_ring - offset
+        base_offset = {"Opposition": 0.0, "Quadrat": 2.0, "Trigon": 4.0, "Sextil": 6.0}.get(asp["aspect"], 0)
+        offset = base_offset + (idx % 4) * 1.35
 
-        x1, y1 = polar(cx, cy, r1, a1)
-        x2, y2 = polar(cx, cy, r2, a2)
+        r = aspect_ring - offset
+        x1, y1 = polar(cx, cy, r, a1)
+        x2, y2 = polar(cx, cy, r, a2)
 
-        svg.append(svg_line(x1, y1, x2, y2, asp["color"], 0.95, 0.58))
+        opacity = 0.62 if asp["aspect"] in ["Quadrat", "Opposition"] else 0.52
+        width_line = 1.0 if asp["aspect"] in ["Quadrat", "Opposition"] else 0.88
+
+        svg.append(svg_line(x1, y1, x2, y2, asp["color"], width_line, opacity))
 
     for p in spread_planets(chart["planets"]):
         true_lon = p["longitude"]
@@ -403,7 +409,7 @@ def generate_professional_cosmogram_svg(chart):
 
         if angular_diff(true_lon, disp_lon) > 1.5:
             tx, ty = polar(cx, cy, r - 18, angle_for_longitude(true_lon))
-            svg.append(svg_line(px, py + 3, tx, ty, "#888", 0.45, 0.55))
+            svg.append(svg_line(px, py + 3, tx, ty, "#888", 0.42, 0.5))
 
     x, y = 18, 145
     svg.append(svg_text(x, y, "PLANETEN IM ZEICHEN", 9, weight="700"))
@@ -419,7 +425,6 @@ def generate_professional_cosmogram_svg(chart):
     y += 14
 
     roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
-
     for i, h in enumerate(chart["houses_raw"]):
         _, sign, _, _, _, deg = sign_data(h)
         svg.append(svg_text(x, y, f'{roman[i]}  {sign} {deg_to_dms(deg)}', 7.9))
