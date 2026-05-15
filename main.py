@@ -1104,3 +1104,65 @@ def get_cosmogram_png(
 
     png_bytes = cairosvg.svg2png(bytestring=svg.encode("utf-8"))
     return Response(content=png_bytes, media_type="image/png")
+
+@app.get("/generate-chart")
+def generate_chart(
+    birth_date: str,
+    birth_time: str,
+    birth_place: str,
+    country: str,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    timezone: Optional[str] = None,
+    width: int = 1080,
+    height: int = 760,
+):
+    data = BirthData(
+        birth_date=birth_date,
+        birth_time=birth_time,
+        birth_place=birth_place,
+        country=country,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+    )
+
+    result = build_chart(data)
+
+    if not result.get("success"):
+        return result
+
+    image_url = (
+        "https://astro-birth-chart-api.onrender.com/cosmogram.png"
+        f"?birth_date={birth_date}"
+        f"&birth_time={birth_time}"
+        f"&birth_place={birth_place}"
+        f"&country={country}"
+        f"&width={width}"
+        f"&height={height}"
+    )
+
+    if latitude is not None:
+        image_url += f"&latitude={latitude}"
+    if longitude is not None:
+        image_url += f"&longitude={longitude}"
+    if timezone is not None:
+        image_url += f"&timezone={timezone}"
+
+    return {
+        "success": True,
+        "image_url": image_url,
+        "birth_date": birth_date,
+        "birth_time": birth_time,
+        "birth_place": birth_place,
+        "country": country,
+        "coordinates": result["coordinates"],
+        "timezone": result["timezone"],
+        "ascendant": result["ascendant"],
+        "mc": result["mc"],
+        "planets": result["planets"],
+        "houses": result["houses"],
+        "aspects": result["aspects"],
+        "elements": result["elements"],
+        "modalities": result["modalities"],
+    }
