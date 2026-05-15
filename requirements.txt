@@ -7,3 +7,4 @@ pytz
 geopy
 svgwrite
 numpy
+CairoSVG
