@@ -51,6 +51,16 @@ ASPECTS = [
     ("Opposition", 180, 8, "#C05050"),
 ]
 
+AMBIGUOUS_PLACES = {
+    "tschuj",
+    "chuy",
+    "chui",
+    "chuy region",
+    "chuy oblast",
+    "tschuj region",
+    "tschuj oblast",
+}
+
 
 class BirthData(BaseModel):
     birth_date: str
@@ -100,10 +110,12 @@ def point_on_arc(start, end, value):
     start = norm_deg(start)
     end = norm_deg(end)
     value = norm_deg(value)
+
     if end < start:
         end += 360
     if value < start:
         value += 360
+
     return start <= value < end
 
 
@@ -168,14 +180,14 @@ def generate_professional_cosmogram_svg(chart):
     width = 1080
     height = 760
 
-    cx = 690
-    cy = 285
+    cx = 705
+    cy = 282
 
-    outer = 245
-    zodiac_inner = 222
-    house_ring = 190
-    planet_ring = 172
-    aspect_ring = 118
+    outer = 278
+    zodiac_inner = 252
+    house_ring = 214
+    planet_ring = 194
+    aspect_ring = 145
 
     bg = "#f7f4ed"
     grid = "#b8b2a7"
@@ -187,21 +199,30 @@ def generate_professional_cosmogram_svg(chart):
         f'viewBox="0 0 {width} {height}">'
     )
     svg.append(f'<rect width="100%" height="100%" fill="{bg}"/>')
+    svg.append("""
+<defs>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+<feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-opacity="0.13"/>
+</filter>
+</defs>
+""")
 
-    # Header
     svg.append(svg_text(18, 28, "DEIN KOSMOGRAMM", 16, weight="bold"))
     svg.append(svg_text(18, 46, "Geburtshoroskop", 10))
     svg.append(svg_text(18, 76, chart["display_birth"], 8))
     svg.append(svg_text(18, 90, chart["display_place"], 8))
-    svg.append(svg_text(18, 104, f'{chart["coordinates"]["latitude"]:.4f}° N / {chart["coordinates"]["longitude"]:.4f}° E', 8))
+    svg.append(svg_text(
+        18,
+        104,
+        f'{chart["coordinates"]["latitude"]:.5f}° N / {chart["coordinates"]["longitude"]:.5f}° E',
+        8
+    ))
 
-    # Rings
     svg.append(svg_circle(cx, cy, outer, stroke="#444", width=1.5))
     svg.append(svg_circle(cx, cy, zodiac_inner, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, house_ring, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, aspect_ring, stroke="#ddd5c7", width=0.7))
 
-    # Zodiac separators + glyphs
     for i, (name, glyph, element, modality) in enumerate(ZODIAC):
         lon = i * 30
         angle = angle_for_longitude(lon)
@@ -211,7 +232,7 @@ def generate_professional_cosmogram_svg(chart):
         svg.append(svg_line(x1, y1, x2, y2, grid, 0.8))
 
         mid_angle = angle_for_longitude(lon + 15)
-        tx, ty = polar(cx, cy, 236, mid_angle)
+        tx, ty = polar(cx, cy, 266, mid_angle)
 
         color = {
             "Feuer": "#D24A43",
@@ -220,19 +241,18 @@ def generate_professional_cosmogram_svg(chart):
             "Wasser": "#4477BB",
         }[element]
 
-        svg.append(svg_text(tx, ty + 6, glyph, 20, anchor="middle", fill=color))
+        svg.append(svg_text(tx, ty + 7, glyph, 24, anchor="middle", fill=color))
 
-    # Degree ticks
     for d in range(360):
         angle = angle_for_longitude(d)
         r1 = outer
-        r2 = outer - (7 if d % 10 == 0 else 3)
+        r2 = outer - (8 if d % 10 == 0 else 3)
         x1, y1 = polar(cx, cy, r1, angle)
         x2, y2 = polar(cx, cy, r2, angle)
         svg.append(svg_line(x1, y1, x2, y2, "#c8c0b1", 0.35))
 
-    # Houses
     houses = chart["houses_raw"]
+
     for i, cusp in enumerate(houses):
         angle = angle_for_longitude(cusp)
         x1, y1 = polar(cx, cy, aspect_ring, angle)
@@ -243,10 +263,9 @@ def generate_professional_cosmogram_svg(chart):
 
         next_cusp = houses[(i + 1) % 12]
         mid = cusp + ((next_cusp - cusp) % 360) / 2
-        tx, ty = polar(cx, cy, 154, angle_for_longitude(mid))
-        svg.append(svg_text(tx, ty + 3, str(i + 1), 8, anchor="middle", fill="#666"))
+        tx, ty = polar(cx, cy, 174, angle_for_longitude(mid))
+        svg.append(svg_text(tx, ty + 3, str(i + 1), 10, anchor="middle", fill="#666"))
 
-    # AC/DC/MC/IC
     asc = chart["ascendant"]["longitude"]
     mc = chart["mc"]["longitude"]
 
@@ -266,7 +285,6 @@ def generate_professional_cosmogram_svg(chart):
         svg.append(svg_line(x1, y1, x2, y2, "#111", 1.4))
         svg.append(svg_text(tx, ty + 4, label, 10, anchor="middle", weight="bold", fill="#111"))
 
-    # Aspects
     planet_positions = {p["planet"]: p["longitude"] for p in chart["planets"]}
 
     for asp in chart["aspects"]:
@@ -279,35 +297,32 @@ def generate_professional_cosmogram_svg(chart):
         x1, y1 = polar(cx, cy, aspect_ring, a1)
         x2, y2 = polar(cx, cy, aspect_ring, a2)
 
-        svg.append(svg_line(x1, y1, x2, y2, asp["color"], 0.9, 0.65))
+        svg.append(svg_line(x1, y1, x2, y2, asp["color"], 1.35, 0.78))
 
-    # Planets with collision handling
     placed_angles = []
-    glyph_map = {k: v[1] for k, v in PLANETS.items()}
-
     sorted_planets = sorted(chart["planets"], key=lambda p: p["longitude"])
 
     for p in sorted_planets:
         lon = p["longitude"]
-        angle_deg = lon
         r = planet_ring
+        collision_count = 0
 
         for used in placed_angles:
-            if abs((angle_deg - used + 180) % 360 - 180) < 6:
-                r -= 18
+            diff = abs((lon - used + 180) % 360 - 180)
+            if diff < 8:
+                collision_count += 1
 
-        placed_angles.append(angle_deg)
+        r -= collision_count * 16
+        placed_angles.append(lon)
 
         angle = angle_for_longitude(lon)
         px, py = polar(cx, cy, r, angle)
 
-        glyph = glyph_map.get(p["planet"], p["planet"])
         _, _, _, _, _, deg = sign_data(lon)
 
-        svg.append(svg_text(px, py, glyph, 17, anchor="middle", fill="#111"))
-        svg.append(svg_text(px, py + 13, deg_to_dms(deg), 7, anchor="middle", fill="#333"))
+        svg.append(svg_text(px, py, p["glyph"], 21, anchor="middle", fill="#111"))
+        svg.append(svg_text(px, py + 15, deg_to_dms(deg), 8.2, anchor="middle", fill="#333"))
 
-    # Left tables
     x = 18
     y = 145
 
@@ -317,8 +332,8 @@ def generate_professional_cosmogram_svg(chart):
     for p in chart["planets"]:
         retro = " ℞" if p["retrograde"] else ""
         line = f'{p["glyph"]} {p["planet"]}: {p["sign"]} {deg_to_dms(p["degree"])}{retro}'
-        svg.append(svg_text(x, y, line, 7.4))
-        y += 12
+        svg.append(svg_text(x, y, line, 7.9))
+        y += 14
 
     y += 10
     svg.append(svg_text(x, y, "HÄUSER (Placidus)", 9, weight="bold"))
@@ -328,42 +343,38 @@ def generate_professional_cosmogram_svg(chart):
 
     for i, h in enumerate(chart["houses_raw"]):
         _, sign, _, _, _, deg = sign_data(h)
-        svg.append(svg_text(x, y, f'{roman[i]}  {sign} {deg_to_dms(deg)}', 7.4))
-        y += 12
+        svg.append(svg_text(x, y, f'{roman[i]}  {sign} {deg_to_dms(deg)}', 7.9))
+        y += 14
 
-    # Core box
-    core_y = 575
-    svg.append(f'<rect x="15" y="{core_y}" width="210" height="115" fill="#fffdf8" stroke="{border}" rx="6"/>')
+    core_y = 565
+    svg.append(f'<rect x="15" y="{core_y}" width="210" height="125" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(28, core_y + 18, "KERNPUNKTE", 9, weight="bold"))
     svg.append(svg_text(28, core_y + 38, f'Aszendent: {chart["ascendant"]["sign"]} {deg_to_dms(chart["ascendant"]["degree"])}', 7.5))
     svg.append(svg_text(28, core_y + 54, f'MC: {chart["mc"]["sign"]} {deg_to_dms(chart["mc"]["degree"])}', 7.5))
     svg.append(svg_text(28, core_y + 70, f'UTC: {chart["utc_time"][:16]}', 7.5))
     svg.append(svg_text(28, core_y + 86, f'Zeitzone: {chart["timezone"]}', 7.5))
-    svg.append(svg_text(28, core_y + 102, "Tierkreis: tropisch", 7.5))
+    svg.append(svg_text(28, core_y + 102, f'Quelle Ort: {chart["location_source"]}', 7.5))
 
-    # Bottom boxes
-    bottom_y = 545
+    bottom_y = 560
 
-    # Aspects
     asp_x = 260
-    svg.append(f'<rect x="{asp_x}" y="{bottom_y}" width="300" height="145" fill="#fffdf8" stroke="{border}" rx="6"/>')
+    svg.append(f'<rect x="{asp_x}" y="{bottom_y}" width="300" height="160" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(asp_x + 14, bottom_y + 18, "WICHTIGE ASPEKTE", 9, weight="bold"))
 
     yy = bottom_y + 36
     for asp in chart["aspects"][:10]:
         line = f'{asp["p1"]} {asp["aspect"]} {asp["p2"]} — Orb {asp["orb"]}°'
         svg.append(svg_text(asp_x + 14, yy, line, 7))
-        yy += 11
+        yy += 12
 
-    # Elements/modalities
     stat_x = 585
-    svg.append(f'<rect x="{stat_x}" y="{bottom_y}" width="170" height="145" fill="#fffdf8" stroke="{border}" rx="6"/>')
+    svg.append(f'<rect x="{stat_x}" y="{bottom_y}" width="170" height="160" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(stat_x + 14, bottom_y + 18, "ELEMENTE", 9, weight="bold"))
 
     yy = bottom_y + 38
     for key, val in chart["elements"].items():
         svg.append(svg_text(stat_x + 18, yy, f"{key}: {val}", 7.5))
-        yy += 14
+        yy += 15
 
     yy += 10
     svg.append(svg_text(stat_x + 14, yy, "MODALITÄTEN", 9, weight="bold"))
@@ -371,83 +382,112 @@ def generate_professional_cosmogram_svg(chart):
 
     for key, val in chart["modalities"].items():
         svg.append(svg_text(stat_x + 18, yy, f"{key}: {val}", 7.5))
-        yy += 14
+        yy += 15
 
-    # Interpretation
     interp_x = 780
-    svg.append(f'<rect x="{interp_x}" y="{bottom_y}" width="270" height="145" fill="#fffdf8" stroke="{border}" rx="6"/>')
+    svg.append(f'<rect x="{interp_x}" y="{bottom_y}" width="270" height="160" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(interp_x + 14, bottom_y + 18, "KURZINTERPRETATION", 9, weight="bold"))
 
     sun = chart["planets"][0]
-    svg.append(svg_text(interp_x + 14, bottom_y + 40, f'Sonne in {sun["sign"]}', 7.5))
-    svg.append(svg_text(interp_x + 14, bottom_y + 56, f'Aszendent in {chart["ascendant"]["sign"]}', 7.5))
-    svg.append(svg_text(interp_x + 14, bottom_y + 72, f'MC in {chart["mc"]["sign"]}', 7.5))
-    svg.append(svg_text(interp_x + 14, bottom_y + 98, "Die Deutung erfolgt datenbasiert", 7.5))
-    svg.append(svg_text(interp_x + 14, bottom_y + 112, "aus den berechneten Positionen.", 7.5))
+    svg.append(svg_text(interp_x + 14, bottom_y + 42, f'Sonne in {sun["sign"]}', 7.5))
+    svg.append(svg_text(interp_x + 14, bottom_y + 58, f'Aszendent in {chart["ascendant"]["sign"]}', 7.5))
+    svg.append(svg_text(interp_x + 14, bottom_y + 74, f'MC in {chart["mc"]["sign"]}', 7.5))
+    svg.append(svg_text(interp_x + 14, bottom_y + 104, "Deutung nur auf Basis", 7.5))
+    svg.append(svg_text(interp_x + 14, bottom_y + 118, "der berechneten Daten.", 7.5))
 
-    # Footer
-    svg.append(f'<rect x="245" y="710" width="610" height="24" fill="#fffdf8" stroke="{border}" rx="5"/>')
-    svg.append(svg_text(550, 725, "Dieses Kosmogramm wurde aus berechneten astronomischen Daten erzeugt.", 7.5, anchor="middle"))
+    svg.append(f'<rect x="245" y="735" width="610" height="20" fill="#fffdf8" stroke="{border}" rx="5"/>')
+    svg.append(svg_text(550, 748, "Berechnung: Swiss Ephemeris, tropischer Tierkreis, Placidus-Häuser.", 7.2, anchor="middle"))
 
     svg.append("</svg>")
     return "".join(svg)
 
 
-def build_chart(data: BirthData):
-    fallback_locations = {
-        "tschuj,kyrgyzstan": {
-            "latitude": 42.7483142,
-            "longitude": 75.0421531,
-            "timezone": "Asia/Bishkek"
-        },
-        "chuy,kyrgyzstan": {
-            "latitude": 42.7483142,
-            "longitude": 75.0421531,
-            "timezone": "Asia/Bishkek"
-        }
-    }
+def resolve_location(data: BirthData):
+    normalized_place = data.birth_place.strip().lower()
 
     if data.latitude is not None and data.longitude is not None:
-        latitude = data.latitude
-        longitude = data.longitude
-        timezone_name = data.timezone or tf.timezone_at(lat=latitude, lng=longitude)
-    else:
-        location_query = f"{data.birth_place}, {data.country}"
-        location_key = f"{data.birth_place},{data.country}".lower().replace(" ", "")
+        timezone_name = data.timezone or tf.timezone_at(lat=data.latitude, lng=data.longitude)
 
-        try:
-            location = geolocator.geocode(location_query, timeout=10)
-        except Exception:
-            location = None
-
-        if location:
-            latitude = location.latitude
-            longitude = location.longitude
-            timezone_name = tf.timezone_at(lat=latitude, lng=longitude)
-        elif location_key in fallback_locations:
-            latitude = fallback_locations[location_key]["latitude"]
-            longitude = fallback_locations[location_key]["longitude"]
-            timezone_name = fallback_locations[location_key]["timezone"]
-        else:
+        if not timezone_name:
             return {
                 "success": False,
-                "error": "Location lookup failed. Please provide coordinates manually."
+                "error": "Timezone not found for provided coordinates."
             }
+
+        return {
+            "success": True,
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "timezone": timezone_name,
+            "source": "user_coordinates",
+            "precision": "exact_if_birthplace_coordinates_are_exact"
+        }
+
+    if normalized_place in AMBIGUOUS_PLACES:
+        return {
+            "success": False,
+            "error": (
+                "Der Geburtsort ist mehrdeutig. Für eine korrekte AC/MC- und Häuserberechnung "
+                "bitte exakte Koordinaten übergeben: latitude, longitude und optional timezone."
+            )
+        }
+
+    location_query = f"{data.birth_place}, {data.country}"
+
+    try:
+        location = geolocator.geocode(location_query, timeout=10, exactly_one=True)
+    except Exception:
+        location = None
+
+    if not location:
+        return {
+            "success": False,
+            "error": "Location lookup failed. Please provide exact coordinates."
+        }
+
+    timezone_name = tf.timezone_at(lat=location.latitude, lng=location.longitude)
 
     if not timezone_name:
         return {
             "success": False,
-            "error": "Timezone not found."
+            "error": "Timezone not found. Please provide timezone manually."
         }
+
+    return {
+        "success": True,
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "timezone": timezone_name,
+        "source": "geopy_nominatim",
+        "precision": "geocoder_result_review_recommended"
+    }
+
+
+def build_chart(data: BirthData):
+    location = resolve_location(data)
+
+    if not location["success"]:
+        return location
+
+    latitude = location["latitude"]
+    longitude = location["longitude"]
+    timezone_name = location["timezone"]
 
     local_tz = pytz.timezone(timezone_name)
 
-    local_datetime = local_tz.localize(
-        datetime.strptime(
-            f"{data.birth_date} {data.birth_time}",
-            "%Y-%m-%d %H:%M"
+    try:
+        local_datetime = local_tz.localize(
+            datetime.strptime(
+                f"{data.birth_date} {data.birth_time}",
+                "%Y-%m-%d %H:%M"
+            ),
+            is_dst=None
         )
-    )
+    except Exception:
+        return {
+            "success": False,
+            "error": "Invalid or ambiguous local birth time."
+        }
 
     utc_datetime = local_datetime.astimezone(pytz.utc)
 
@@ -455,7 +495,7 @@ def build_chart(data: BirthData):
         utc_datetime.year,
         utc_datetime.month,
         utc_datetime.day,
-        utc_datetime.hour + utc_datetime.minute / 60.0
+        utc_datetime.hour + utc_datetime.minute / 60.0 + utc_datetime.second / 3600.0
     )
 
     houses, ascmc = swe.houses(julian_day, latitude, longitude, b'P')
@@ -479,8 +519,8 @@ def build_chart(data: BirthData):
             "glyph": glyph,
             "sign": sign,
             "sign_glyph": sign_glyph,
-            "degree": round(degree, 2),
-            "longitude": round(planet_longitude, 2),
+            "degree": round(degree, 4),
+            "longitude": round(planet_longitude, 4),
             "house": house,
             "retrograde": retrograde,
             "element": element,
@@ -513,6 +553,8 @@ def build_chart(data: BirthData):
             "latitude": latitude,
             "longitude": longitude
         },
+        "location_source": location["source"],
+        "location_precision": location["precision"],
         "timezone": timezone_name,
         "utc_time": utc_datetime.isoformat(),
         "julian_day": julian_day,
@@ -521,22 +563,22 @@ def build_chart(data: BirthData):
         "ascendant": {
             "sign": asc_sign,
             "glyph": asc_glyph,
-            "degree": round(asc_degree, 2),
-            "longitude": round(ascendant, 2)
+            "degree": round(asc_degree, 4),
+            "longitude": round(ascendant, 4)
         },
         "mc": {
             "sign": mc_sign,
             "glyph": mc_glyph,
-            "degree": round(mc_degree, 2),
-            "longitude": round(mc, 2)
+            "degree": round(mc_degree, 4),
+            "longitude": round(mc, 4)
         },
         "planets": planet_results,
         "houses": [
             {
                 "house": i + 1,
-                "longitude": round(h, 2),
+                "longitude": round(h, 4),
                 "sign": sign_data(h)[1],
-                "degree": round(sign_data(h)[5], 2)
+                "degree": round(sign_data(h)[5], 4)
             }
             for i, h in enumerate(houses_raw)
         ],
@@ -586,8 +628,9 @@ def get_cosmogram_svg(
     result = build_chart(data)
 
     if not result.get("success"):
+        message = safe_text(result.get("error", "Calculation failed"))
         return Response(
-            content="<svg xmlns='http://www.w3.org/2000/svg'><text x='20' y='40'>Calculation failed</text></svg>",
+            content=f"<svg xmlns='http://www.w3.org/2000/svg' width='900' height='160'><text x='20' y='50' font-size='18'>{message}</text></svg>",
             media_type="image/svg+xml"
         )
 
