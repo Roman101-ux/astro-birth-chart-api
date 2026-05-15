@@ -10,6 +10,7 @@ import pytz
 import swisseph as swe
 import math
 import random
+import cairosvg
 
 app = FastAPI(title="Astralytica Premium API", version="4.0.0")
 
