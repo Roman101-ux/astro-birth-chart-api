@@ -44,9 +44,9 @@ PLANETS = {
 
 ASPECTS = [
     ("Konjunktion", 0, 8, "#777777"),
-    ("Sextil", 60, 5, "#5D9DE6"),
+    ("Sextil", 60, 5, "#4F8FE8"),
     ("Quadrat", 90, 6, "#D85C5C"),
-    ("Trigon", 120, 6, "#5D9DE6"),
+    ("Trigon", 120, 6, "#4F8FE8"),
     ("Opposition", 180, 8, "#C74747"),
 ]
 
@@ -169,13 +169,6 @@ def svg_line(x1, y1, x2, y2, color="#222", width=1, opacity=1):
     )
 
 
-def svg_curve(x1, y1, x2, y2, qx, qy, color="#222", width=1, opacity=1):
-    return (
-        f'<path d="M {x1:.2f} {y1:.2f} Q {qx:.2f} {qy:.2f} {x2:.2f} {y2:.2f}" '
-        f'fill="none" stroke="{color}" stroke-width="{width}" opacity="{opacity}"/>'
-    )
-
-
 def svg_circle(cx, cy, r, fill="none", stroke="#222", width=1, opacity=1):
     return (
         f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{r:.2f}" '
@@ -237,7 +230,7 @@ def spread_planets(planets, min_gap=8.0):
         for idx, p in enumerate(items):
             q = p.copy()
             q["display_longitude"] = norm_deg(start + idx * (spread / max(len(items) - 1, 1)))
-            q["display_radius_offset"] = (idx % 3) * 13
+            q["display_radius_offset"] = (idx % 3) * 12
             result.append(q)
 
     for p in planets:
@@ -257,13 +250,14 @@ def spread_planets(planets, min_gap=8.0):
 
 def generate_professional_cosmogram_svg(chart):
     width, height = 1080, 760
-    cx, cy = 690, 278
 
-    outer = 268
-    zodiac_inner = 242
-    house_ring = 204
-    planet_ring = 184
-    aspect_ring = 145
+    cx, cy = 690, 300
+
+    outer = 250
+    zodiac_inner = 226
+    house_ring = 192
+    planet_ring = 174
+    aspect_ring = 132
 
     bg = "#f7f4ed"
     ink = "#171717"
@@ -283,20 +277,6 @@ def generate_professional_cosmogram_svg(chart):
         "Veränderlich": "#5B8A4B",
     }
 
-    planet_aspect_offsets = {
-        "Sonne": 0,
-        "Mond": 3,
-        "Merkur": 6,
-        "Venus": 9,
-        "Mars": 12,
-        "Jupiter": 15,
-        "Saturn": 18,
-        "Uranus": 21,
-        "Neptun": 24,
-        "Pluto": 27,
-        "Nordknoten": 30,
-    }
-
     svg = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         f'<rect width="100%" height="100%" fill="{bg}"/>',
@@ -313,44 +293,57 @@ def generate_professional_cosmogram_svg(chart):
     svg.append(svg_text(18, 46, "Geburtshoroskop", 10, fill=ink))
     svg.append(svg_text(18, 76, chart["display_birth"], 8))
     svg.append(svg_text(18, 90, chart["display_place"], 8))
-    svg.append(svg_text(18, 104, f'{chart["coordinates"]["latitude"]:.5f}° N / {chart["coordinates"]["longitude"]:.5f}° E', 8))
+    svg.append(svg_text(
+        18,
+        104,
+        f'{chart["coordinates"]["latitude"]:.5f}° N / {chart["coordinates"]["longitude"]:.5f}° E',
+        8
+    ))
 
-    svg.append(svg_circle(cx, cy, outer, stroke="#3d3d3d", width=1.5))
+    # Main wheel
+    svg.append(svg_circle(cx, cy, outer, stroke="#3d3d3d", width=1.45))
     svg.append(svg_circle(cx, cy, zodiac_inner, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, house_ring, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, aspect_ring, stroke="#ddd5c7", width=0.65))
 
+    # Zodiac ring
     for i, (_, glyph, element, _) in enumerate(ZODIAC):
         lon = i * 30
         angle = angle_for_longitude(lon)
+
         x1, y1 = polar(cx, cy, zodiac_inner, angle)
         x2, y2 = polar(cx, cy, outer, angle)
         svg.append(svg_line(x1, y1, x2, y2, grid, 0.8))
 
         mid = angle_for_longitude(lon + 15)
-        tx, ty = polar(cx, cy, 256, mid)
-        svg.append(svg_symbol(tx, ty + 8, glyph, 25, fill=element_colors[element]))
+        tx, ty = polar(cx, cy, 239, mid)
+        svg.append(svg_symbol(tx, ty + 8, glyph, 23, fill=element_colors[element]))
 
+    # Degree ticks
     for d in range(360):
         angle = angle_for_longitude(d)
-        r2 = outer - (8 if d % 10 == 0 else 3)
+        r2 = outer - (7 if d % 10 == 0 else 3)
         x1, y1 = polar(cx, cy, outer, angle)
         x2, y2 = polar(cx, cy, r2, angle)
         svg.append(svg_line(x1, y1, x2, y2, "#c8c0b1", 0.35))
 
+    # Houses
     houses = chart["houses_raw"]
     for i, cusp in enumerate(houses):
         angle = angle_for_longitude(cusp)
+
         x1, y1 = polar(cx, cy, aspect_ring, angle)
         x2, y2 = polar(cx, cy, outer, angle)
+
         is_axis = i in [0, 3, 6, 9]
-        svg.append(svg_line(x1, y1, x2, y2, "#222" if is_axis else grid, 1.25 if is_axis else 0.7))
+        svg.append(svg_line(x1, y1, x2, y2, "#222" if is_axis else grid, 1.2 if is_axis else 0.7))
 
         next_cusp = houses[(i + 1) % 12]
         mid = cusp + ((next_cusp - cusp) % 360) / 2
-        tx, ty = polar(cx, cy, 166, angle_for_longitude(mid))
-        svg.append(svg_text(tx, ty + 3, str(i + 1), 10, anchor="middle", fill="#666"))
+        tx, ty = polar(cx, cy, 160, angle_for_longitude(mid))
+        svg.append(svg_text(tx, ty + 3, str(i + 1), 9.5, anchor="middle", fill="#666"))
 
+    # Axes kept inside viewbox
     asc = chart["ascendant"]["longitude"]
     mc = chart["mc"]["longitude"]
 
@@ -361,12 +354,15 @@ def generate_professional_cosmogram_svg(chart):
         ("IC", norm_deg(mc + 180)),
     ]:
         angle = angle_for_longitude(lon)
-        x1, y1 = polar(cx, cy, aspect_ring, angle)
-        x2, y2 = polar(cx, cy, outer + 10, angle)
-        tx, ty = polar(cx, cy, outer + 20, angle)
-        svg.append(svg_line(x1, y1, x2, y2, "#111", 1.3))
-        svg.append(svg_text(tx, ty + 4, label, 10, anchor="middle", weight="700", fill="#111"))
 
+        x1, y1 = polar(cx, cy, aspect_ring, angle)
+        x2, y2 = polar(cx, cy, outer + 4, angle)
+        tx, ty = polar(cx, cy, outer + 12, angle)
+
+        svg.append(svg_line(x1, y1, x2, y2, "#111", 1.25))
+        svg.append(svg_text(tx, ty + 4, label, 9.5, anchor="middle", weight="700", fill="#111"))
+
+    # Straight aspect lines
     planet_positions = {p["planet"]: p["longitude"] for p in chart["planets"]}
 
     for idx, asp in enumerate(chart["aspects"]):
@@ -380,25 +376,15 @@ def generate_professional_cosmogram_svg(chart):
         a2 = angle_for_longitude(lon2)
 
         offset = (idx % 5) * 1.8
-
         r1 = aspect_ring - offset
         r2 = aspect_ring - offset
 
         x1, y1 = polar(cx, cy, r1, a1)
         x2, y2 = polar(cx, cy, r2, a2)
 
-        svg.append(
-            svg_line(
-                x1,
-                y1,
-                x2,
-                y2,
-                asp["color"],
-                1.25,
-                0.78
-            )
-        )
+        svg.append(svg_line(x1, y1, x2, y2, asp["color"], 1.15, 0.74))
 
+    # Planets
     for p in spread_planets(chart["planets"]):
         true_lon = p["longitude"]
         disp_lon = p["display_longitude"]
@@ -409,13 +395,14 @@ def generate_professional_cosmogram_svg(chart):
         px, py = polar(cx, cy, r, angle)
         _, _, _, _, _, deg = sign_data(true_lon)
 
-        svg.append(svg_symbol(px, py, p["glyph"], 21, fill="#111"))
-        svg.append(svg_text(px, py + 15, deg_to_dms(deg), 8, anchor="middle", fill="#333"))
+        svg.append(svg_symbol(px, py, p["glyph"], 20, fill="#111"))
+        svg.append(svg_text(px, py + 14, deg_to_dms(deg), 7.7, anchor="middle", fill="#333"))
 
         if angular_diff(true_lon, disp_lon) > 1.5:
-            tx, ty = polar(cx, cy, r - 20, angle_for_longitude(true_lon))
+            tx, ty = polar(cx, cy, r - 18, angle_for_longitude(true_lon))
             svg.append(svg_line(px, py + 3, tx, ty, "#888", 0.45, 0.55))
 
+    # Left column
     x, y = 18, 145
     svg.append(svg_text(x, y, "PLANETEN IM ZEICHEN", 9, weight="700"))
     y += 14
@@ -435,8 +422,9 @@ def generate_professional_cosmogram_svg(chart):
         svg.append(svg_text(x, y, f'{roman[i]}  {sign} {deg_to_dms(deg)}', 7.9))
         y += 14
 
-    core_y = 560
-    bottom_y = 560
+    # Bottom boxes
+    core_y = 575
+    bottom_y = 575
 
     svg.append(f'<rect x="15" y="{core_y}" width="210" height="130" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(28, core_y + 18, "KERNPUNKTE", 9, weight="700"))
@@ -445,38 +433,38 @@ def generate_professional_cosmogram_svg(chart):
     svg.append(svg_text(28, core_y + 70, f'UTC: {chart["utc_time"][:16]}', 7.5))
     svg.append(svg_text(28, core_y + 86, f'Zeitzone: {chart["timezone"]}', 7.5))
     svg.append(svg_text(28, core_y + 102, f'Quelle Ort: {chart["location_source"]}', 7.5))
-    svg.append(svg_text(28, core_y + 118, f'System: tropisch / Placidus', 7.5))
+    svg.append(svg_text(28, core_y + 118, "System: tropisch / Placidus", 7.5))
 
     asp_x = 250
-    svg.append(f'<rect x="{asp_x}" y="{bottom_y}" width="310" height="160" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
+    svg.append(f'<rect x="{asp_x}" y="{bottom_y}" width="310" height="145" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(asp_x + 14, bottom_y + 18, "WICHTIGE ASPEKTE", 9, weight="700"))
 
     yy = bottom_y + 36
-    for asp in chart["aspects"][:10]:
+    for asp in chart["aspects"][:9]:
         svg.append(svg_text(asp_x + 14, yy, f'{asp["p1"]} {asp["aspect"]} {asp["p2"]} — Orb {asp["orb"]}°', 7))
         yy += 12
 
     stat_x = 585
-    svg.append(f'<rect x="{stat_x}" y="{bottom_y}" width="170" height="160" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
+    svg.append(f'<rect x="{stat_x}" y="{bottom_y}" width="170" height="145" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(stat_x + 14, bottom_y + 18, "ELEMENTE", 9, weight="700"))
-    svg.append(svg_pie(stat_x + 42, bottom_y + 62, 24, chart["elements"], element_colors))
+    svg.append(svg_pie(stat_x + 42, bottom_y + 60, 22, chart["elements"], element_colors))
 
     yy = bottom_y + 38
     for key, val in chart["elements"].items():
         svg.append(svg_text(stat_x + 78, yy, f"{key}: {val}", 7.5))
-        yy += 15
+        yy += 14
 
-    yy = bottom_y + 104
+    yy = bottom_y + 98
     svg.append(svg_text(stat_x + 14, yy, "MODALITÄTEN", 9, weight="700"))
-    svg.append(svg_pie(stat_x + 42, bottom_y + 132, 22, chart["modalities"], modality_colors))
+    svg.append(svg_pie(stat_x + 42, bottom_y + 125, 20, chart["modalities"], modality_colors))
 
     yy += 18
     for key, val in chart["modalities"].items():
         svg.append(svg_text(stat_x + 78, yy, f"{key}: {val}", 7.5))
-        yy += 15
+        yy += 14
 
     interp_x = 780
-    svg.append(f'<rect x="{interp_x}" y="{bottom_y}" width="270" height="160" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
+    svg.append(f'<rect x="{interp_x}" y="{bottom_y}" width="270" height="145" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
     svg.append(svg_text(interp_x + 14, bottom_y + 18, "KURZINTERPRETATION", 9, weight="700"))
 
     sun = chart["planets"][0]
