@@ -224,7 +224,7 @@ def spread_planets(planets, min_gap=8.0):
             return
 
         center = sum(p["longitude"] for p in items) / len(items)
-        spread = min(34, max(18, len(items) * 7.0))
+        spread = min(42, max(22, len(items) * 8.5))
         start = center - spread / 2
 
         for idx, p in enumerate(items):
@@ -248,16 +248,25 @@ def spread_planets(planets, min_gap=8.0):
     return result
 
 
+def calculate_planet_position(julian_day, planet_id):
+    try:
+        data = swe.calc_ut(julian_day, planet_id, swe.FLG_SWIEPH | swe.FLG_SPEED)[0]
+        return data, "swiss_ephemeris"
+    except Exception:
+        data = swe.calc_ut(julian_day, planet_id, swe.FLG_MOSEPH | swe.FLG_SPEED)[0]
+        return data, "moshier_fallback"
+
+
 def generate_professional_cosmogram_svg(chart):
     width, height = 1080, 760
 
-    cx, cy = 690, 300
+    cx, cy = 705, 298
 
-    outer = 250
-    zodiac_inner = 226
-    house_ring = 192
-    planet_ring = 174
-    aspect_ring = 132
+    outer = 238
+    zodiac_inner = 214
+    house_ring = 183
+    planet_ring = 166
+    aspect_ring = 120
 
     bg = "#f7f4ed"
     ink = "#171717"
@@ -300,13 +309,11 @@ def generate_professional_cosmogram_svg(chart):
         8
     ))
 
-    # Main wheel
     svg.append(svg_circle(cx, cy, outer, stroke="#3d3d3d", width=1.45))
     svg.append(svg_circle(cx, cy, zodiac_inner, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, house_ring, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, aspect_ring, stroke="#ddd5c7", width=0.65))
 
-    # Zodiac ring
     for i, (_, glyph, element, _) in enumerate(ZODIAC):
         lon = i * 30
         angle = angle_for_longitude(lon)
@@ -316,10 +323,9 @@ def generate_professional_cosmogram_svg(chart):
         svg.append(svg_line(x1, y1, x2, y2, grid, 0.8))
 
         mid = angle_for_longitude(lon + 15)
-        tx, ty = polar(cx, cy, 239, mid)
+        tx, ty = polar(cx, cy, 228, mid)
         svg.append(svg_symbol(tx, ty + 8, glyph, 23, fill=element_colors[element]))
 
-    # Degree ticks
     for d in range(360):
         angle = angle_for_longitude(d)
         r2 = outer - (7 if d % 10 == 0 else 3)
@@ -327,8 +333,8 @@ def generate_professional_cosmogram_svg(chart):
         x2, y2 = polar(cx, cy, r2, angle)
         svg.append(svg_line(x1, y1, x2, y2, "#c8c0b1", 0.35))
 
-    # Houses
     houses = chart["houses_raw"]
+
     for i, cusp in enumerate(houses):
         angle = angle_for_longitude(cusp)
 
@@ -340,10 +346,9 @@ def generate_professional_cosmogram_svg(chart):
 
         next_cusp = houses[(i + 1) % 12]
         mid = cusp + ((next_cusp - cusp) % 360) / 2
-        tx, ty = polar(cx, cy, 160, angle_for_longitude(mid))
+        tx, ty = polar(cx, cy, 150, angle_for_longitude(mid))
         svg.append(svg_text(tx, ty + 3, str(i + 1), 9.5, anchor="middle", fill="#666"))
 
-    # Axes kept inside viewbox
     asc = chart["ascendant"]["longitude"]
     mc = chart["mc"]["longitude"]
 
@@ -357,12 +362,11 @@ def generate_professional_cosmogram_svg(chart):
 
         x1, y1 = polar(cx, cy, aspect_ring, angle)
         x2, y2 = polar(cx, cy, outer + 4, angle)
-        tx, ty = polar(cx, cy, outer + 12, angle)
+        tx, ty = polar(cx, cy, outer + 16, angle)
 
         svg.append(svg_line(x1, y1, x2, y2, "#111", 1.25))
         svg.append(svg_text(tx, ty + 4, label, 9.5, anchor="middle", weight="700", fill="#111"))
 
-    # Straight aspect lines
     planet_positions = {p["planet"]: p["longitude"] for p in chart["planets"]}
 
     for idx, asp in enumerate(chart["aspects"]):
@@ -375,16 +379,15 @@ def generate_professional_cosmogram_svg(chart):
         a1 = angle_for_longitude(lon1)
         a2 = angle_for_longitude(lon2)
 
-        offset = (idx % 5) * 1.8
+        offset = (idx % 5) * 1.5
         r1 = aspect_ring - offset
         r2 = aspect_ring - offset
 
         x1, y1 = polar(cx, cy, r1, a1)
         x2, y2 = polar(cx, cy, r2, a2)
 
-        svg.append(svg_line(x1, y1, x2, y2, asp["color"], 1.15, 0.74))
+        svg.append(svg_line(x1, y1, x2, y2, asp["color"], 0.95, 0.58))
 
-    # Planets
     for p in spread_planets(chart["planets"]):
         true_lon = p["longitude"]
         disp_lon = p["display_longitude"]
@@ -395,14 +398,13 @@ def generate_professional_cosmogram_svg(chart):
         px, py = polar(cx, cy, r, angle)
         _, _, _, _, _, deg = sign_data(true_lon)
 
-        svg.append(svg_symbol(px, py, p["glyph"], 20, fill="#111"))
+        svg.append(svg_symbol(px, py, p["glyph"], 21, fill="#111"))
         svg.append(svg_text(px, py + 14, deg_to_dms(deg), 7.7, anchor="middle", fill="#333"))
 
         if angular_diff(true_lon, disp_lon) > 1.5:
             tx, ty = polar(cx, cy, r - 18, angle_for_longitude(true_lon))
             svg.append(svg_line(px, py + 3, tx, ty, "#888", 0.45, 0.55))
 
-    # Left column
     x, y = 18, 145
     svg.append(svg_text(x, y, "PLANETEN IM ZEICHEN", 9, weight="700"))
     y += 14
@@ -417,12 +419,12 @@ def generate_professional_cosmogram_svg(chart):
     y += 14
 
     roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+
     for i, h in enumerate(chart["houses_raw"]):
         _, sign, _, _, _, deg = sign_data(h)
         svg.append(svg_text(x, y, f'{roman[i]}  {sign} {deg_to_dms(deg)}', 7.9))
         y += 14
 
-    # Bottom boxes
     core_y = 575
     bottom_y = 575
 
@@ -433,7 +435,7 @@ def generate_professional_cosmogram_svg(chart):
     svg.append(svg_text(28, core_y + 70, f'UTC: {chart["utc_time"][:16]}', 7.5))
     svg.append(svg_text(28, core_y + 86, f'Zeitzone: {chart["timezone"]}', 7.5))
     svg.append(svg_text(28, core_y + 102, f'Quelle Ort: {chart["location_source"]}', 7.5))
-    svg.append(svg_text(28, core_y + 118, "System: tropisch / Placidus", 7.5))
+    svg.append(svg_text(28, core_y + 118, f'Ephemeride: {chart["ephemeris_engine"]}', 7.5))
 
     asp_x = 250
     svg.append(f'<rect x="{asp_x}" y="{bottom_y}" width="310" height="145" fill="#fffdf8" stroke="{border}" rx="6" filter="url(#shadow)"/>')
@@ -441,7 +443,7 @@ def generate_professional_cosmogram_svg(chart):
 
     yy = bottom_y + 36
     for asp in chart["aspects"][:9]:
-        svg.append(svg_text(asp_x + 14, yy, f'{asp["p1"]} {asp["aspect"]} {asp["p2"]} — Orb {asp["orb"]}°', 7))
+        svg.append(svg_text(asp_x + 14, yy, f'{asp["p1"]} {asp["aspect"]} {asp["p2"]} — Orb {asp["orb"]}°', 7.6))
         yy += 12
 
     stat_x = 585
@@ -475,7 +477,7 @@ def generate_professional_cosmogram_svg(chart):
     svg.append(svg_text(interp_x + 14, bottom_y + 118, "der berechneten Daten.", 7.5))
 
     svg.append(f'<rect x="245" y="735" width="610" height="20" fill="#fffdf8" stroke="{border}" rx="5"/>')
-    svg.append(svg_text(550, 748, "Berechnung: Swiss Ephemeris, tropischer Tierkreis, Placidus-Häuser.", 7.2, anchor="middle"))
+    svg.append(svg_text(550, 748, "Berechnung: tropischer Tierkreis, Placidus-Häuser. Genauigkeit abhängig von Zeit, Ort, Zeitzone und Ephemeriden.", 7.2, anchor="middle"))
 
     svg.append("</svg>")
     return "".join(svg)
@@ -562,9 +564,12 @@ def build_chart(data: BirthData):
 
     planet_results = []
     points = {}
+    ephemeris_engines = set()
 
     for planet_name, (planet_id, glyph) in PLANETS.items():
-        planet_data = swe.calc_ut(julian_day, planet_id)[0]
+        planet_data, engine = calculate_planet_position(julian_day, planet_id)
+        ephemeris_engines.add(engine)
+
         planet_longitude = norm_deg(planet_data[0])
         retrograde = planet_data[3] < 0
 
@@ -582,6 +587,7 @@ def build_chart(data: BirthData):
             "retrograde": retrograde,
             "element": element,
             "modality": modality,
+            "ephemeris_engine": engine,
         })
 
         points[planet_name] = planet_longitude
@@ -612,6 +618,8 @@ def build_chart(data: BirthData):
         "julian_day": julian_day,
         "zodiac": "tropical",
         "house_system": "Placidus",
+        "ephemeris_engine": ", ".join(sorted(ephemeris_engines)),
+        "accuracy_note": "Accuracy depends on exact birth time, exact coordinates, timezone database and ephemeris availability.",
         "ascendant": {
             "sign": asc_sign,
             "glyph": asc_glyph,
