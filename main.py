@@ -369,7 +369,7 @@ def generate_professional_cosmogram_svg(chart):
 
     planet_positions = {p["planet"]: p["longitude"] for p in chart["planets"]}
 
-        for idx, asp in enumerate(chart["aspects"]):
+    for idx, asp in enumerate(chart["aspects"]):
         if asp["aspect"] == "Konjunktion":
             continue
 
