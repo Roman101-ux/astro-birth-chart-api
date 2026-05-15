@@ -44,9 +44,9 @@ PLANETS = {
 
 ASPECTS = [
     ("Konjunktion", 0, 8, "#777777"),
-    ("Sextil", 60, 5, "#5DA0E8"),
-    ("Quadrat", 90, 6, "#D95C5C"),
-    ("Trigon", 120, 6, "#5DA0E8"),
+    ("Sextil", 60, 5, "#5D9DE6"),
+    ("Quadrat", 90, 6, "#D85C5C"),
+    ("Trigon", 120, 6, "#5D9DE6"),
     ("Opposition", 180, 8, "#C74747"),
 ]
 
@@ -169,6 +169,13 @@ def svg_line(x1, y1, x2, y2, color="#222", width=1, opacity=1):
     )
 
 
+def svg_curve(x1, y1, x2, y2, cx, cy, color="#222", width=1, opacity=1):
+    return (
+        f'<path d="M {x1:.2f} {y1:.2f} Q {cx:.2f} {cy:.2f} {x2:.2f} {y2:.2f}" '
+        f'fill="none" stroke="{color}" stroke-width="{width}" opacity="{opacity}"/>'
+    )
+
+
 def svg_circle(cx, cy, r, fill="none", stroke="#222", width=1, opacity=1):
     return (
         f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{r:.2f}" '
@@ -224,13 +231,13 @@ def spread_planets(planets, min_gap=8.0):
             return
 
         center = sum(p["longitude"] for p in items) / len(items)
-        spread = min(24, max(12, len(items) * 5.5))
+        spread = min(28, max(14, len(items) * 6.0))
         start = center - spread / 2
 
         for idx, p in enumerate(items):
             q = p.copy()
             q["display_longitude"] = norm_deg(start + idx * (spread / max(len(items) - 1, 1)))
-            q["display_radius_offset"] = (idx % 3) * 12
+            q["display_radius_offset"] = (idx % 3) * 13
             result.append(q)
 
     for p in planets:
@@ -256,7 +263,7 @@ def generate_professional_cosmogram_svg(chart):
     zodiac_inner = 242
     house_ring = 204
     planet_ring = 184
-    aspect_ring = 132
+    aspect_ring = 116
 
     bg = "#f7f4ed"
     ink = "#171717"
@@ -274,6 +281,20 @@ def generate_professional_cosmogram_svg(chart):
         "Kardinal": "#D24A43",
         "Fix": "#4477BB",
         "Veränderlich": "#5B8A4B",
+    }
+
+    planet_aspect_offsets = {
+        "Sonne": 0,
+        "Mond": 3,
+        "Merkur": 6,
+        "Venus": 9,
+        "Mars": 12,
+        "Jupiter": 15,
+        "Saturn": 18,
+        "Uranus": 21,
+        "Neptun": 24,
+        "Pluto": 27,
+        "Nordknoten": 30,
     }
 
     svg = [
@@ -299,7 +320,7 @@ def generate_professional_cosmogram_svg(chart):
     svg.append(svg_circle(cx, cy, outer, stroke="#3d3d3d", width=1.5))
     svg.append(svg_circle(cx, cy, zodiac_inner, stroke=grid, width=0.8))
     svg.append(svg_circle(cx, cy, house_ring, stroke=grid, width=0.8))
-    svg.append(svg_circle(cx, cy, aspect_ring, stroke="#ddd5c7", width=0.7))
+    svg.append(svg_circle(cx, cy, aspect_ring, stroke="#ddd5c7", width=0.65))
 
     # Zodiac ring
     for i, (_, glyph, element, _) in enumerate(ZODIAC):
@@ -352,15 +373,30 @@ def generate_professional_cosmogram_svg(chart):
         svg.append(svg_line(x1, y1, x2, y2, "#111", 1.3))
         svg.append(svg_text(tx, ty + 4, label, 10, anchor="middle", weight="700", fill="#111"))
 
-    # Aspects
+    # Aspects as curved, offset lines
     planet_positions = {p["planet"]: p["longitude"] for p in chart["planets"]}
-    for asp in chart["aspects"]:
+
+    for idx, asp in enumerate(chart["aspects"]):
         if asp["aspect"] == "Konjunktion":
             continue
 
-        x1, y1 = polar(cx, cy, aspect_ring, angle_for_longitude(planet_positions[asp["p1"]]))
-        x2, y2 = polar(cx, cy, aspect_ring, angle_for_longitude(planet_positions[asp["p2"]]))
-        svg.append(svg_line(x1, y1, x2, y2, asp["color"], 1.05, 0.68))
+        lon1 = planet_positions[asp["p1"]]
+        lon2 = planet_positions[asp["p2"]]
+
+        a1 = angle_for_longitude(lon1)
+        a2 = angle_for_longitude(lon2)
+
+        r1 = aspect_ring - planet_aspect_offsets.get(asp["p1"], 0) * 0.35
+        r2 = aspect_ring - planet_aspect_offsets.get(asp["p2"], 0) * 0.35
+
+        x1, y1 = polar(cx, cy, r1, a1)
+        x2, y2 = polar(cx, cy, r2, a2)
+
+        mid_angle = angle_for_longitude((lon1 + ((lon2 - lon1 + 540) % 360 - 180) / 2) % 360)
+        curve_strength = 22 + (idx % 5) * 4
+        qx, qy = polar(cx, cy, aspect_ring - curve_strength, mid_angle)
+
+        svg.append(svg_curve(x1, y1, x2, y2, qx, qy, asp["color"], 0.85, 0.46))
 
     # Planets
     for p in spread_planets(chart["planets"]):
