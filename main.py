@@ -892,8 +892,8 @@ def calculate_birth_chart(data: BirthData):
     return build_chart(data)
 
 
-@app.get("/cosmogram.svg")
-def get_cosmogram_svg(
+@app.get("/cosmogram.png")
+def get_cosmogram_png(
     birth_date: str,
     birth_time: str,
     birth_place: str,
@@ -901,8 +901,8 @@ def get_cosmogram_svg(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     timezone: Optional[str] = None,
-    width: int = 1080,
-    height: int = 760,
+    width: int = 1200,
+    height: int = 900,
 ):
     data = BirthData(
         birth_date=birth_date,
@@ -918,10 +918,14 @@ def get_cosmogram_svg(
 
     if not result.get("success"):
         message = safe_text(result.get("error", "Calculation failed"))
-        return Response(
-            content=f"<svg xmlns='http://www.w3.org/2000/svg' width='900' height='160'><text x='20' y='50' font-size='18'>{message}</text></svg>",
-            media_type="image/svg+xml",
+        error_svg = (
+            f"<svg xmlns='http://www.w3.org/2000/svg' width='900' height='160'>"
+            f"<text x='20' y='50' font-size='18'>{message}</text></svg>"
         )
+        png_bytes = cairosvg.svg2png(bytestring=error_svg.encode("utf-8"))
+        return Response(content=png_bytes, media_type="image/png")
 
     svg = generate_professional_cosmogram_svg(result, width=width, height=height)
-    return Response(content=svg, media_type="image/svg+xml")
+    png_bytes = cairosvg.svg2png(bytestring=svg.encode("utf-8"))
+
+    return Response(content=png_bytes, media_type="image/png")
