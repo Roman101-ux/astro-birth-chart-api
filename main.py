@@ -40,7 +40,6 @@ PLANETS = {
     "Uranus": (swe.URANUS, "♅"),
     "Neptun": (swe.NEPTUNE, "♆"),
     "Pluto": (swe.PLUTO, "♇"),
-    "Chiron": (swe.CHIRON, "⚷"),
     "Nordknoten": (swe.MEAN_NODE, "☊"),
 }
 
