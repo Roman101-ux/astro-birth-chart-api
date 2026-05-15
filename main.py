@@ -9,7 +9,7 @@ import pytz
 import swisseph as swe
 import math
 
-app = FastAPI(title="Astralytica Professional API", version="2.1.0")
+app = FastAPI(title="Astralytica Professional API", version="3.0.0")
 geolocator = Nominatim(user_agent="astralytica-professional")
 tf = TimezoneFinder()
 
@@ -44,10 +44,10 @@ PLANETS = {
 
 ASPECTS = [
     ("Konjunktion", 0, 8, "#777777", 0, 0.0),
-    ("Sextil", 60, 5, "#4F8FE8", 1, 0.95),
-    ("Quadrat", 90, 6, "#D85C5C", 3, 1.05),
-    ("Trigon", 120, 6, "#4F8FE8", 1, 0.95),
-    ("Opposition", 180, 8, "#C74747", 4, 1.10),
+    ("Sextil", 60, 5, "#6EA8FF", 1, 0.95),
+    ("Quadrat", 90, 6, "#E07A7A", 3, 1.05),
+    ("Trigon", 120, 6, "#6EA8FF", 1, 0.95),
+    ("Opposition", 180, 8, "#C85F5F", 4, 1.10),
 ]
 
 AMBIGUOUS_PLACES = {"tschuj", "chuy", "chui", "chuy region", "chuy oblast", "tschuj region", "tschuj oblast"}
@@ -73,8 +73,8 @@ class PlanetNode:
         self.y = 0.0
         self.vx = 0.0
         self.vy = 0.0
-        self.label_w = 34.0
-        self.label_h = 30.0
+        self.label_w = 40.0
+        self.label_h = 34.0
 
 def norm_deg(x: float) -> float:
     return x % 360
@@ -144,8 +144,8 @@ def safe_text(x) -> str:
 def svg_text(x, y, text, size=9, anchor="start", weight="400", fill="#222"):
     return f'<text x="{x}" y="{y}" font-size="{size}" text-anchor="{anchor}" font-family="Inter, Segoe UI, Arial, Helvetica, sans-serif" font-weight="{weight}" fill="{fill}">{safe_text(text)}</text>'
 
-def svg_symbol(x, y, text, size=18, anchor="middle", fill="#111"):
-    return f'<text x="{x}" y="{y}" font-size="{size}" text-anchor="{anchor}" font-family="DejaVu Serif, Noto Sans Symbols, Symbola, Arial Unicode MS, serif" font-weight="500" fill="{fill}">{safe_text(text)}</text>'
+def svg_symbol(x, y, text, size=18, anchor="middle", fill="#111", extra=""):
+    return f'<text x="{x}" y="{y}" font-size="{size}" text-anchor="{anchor}" font-family="DejaVu Serif, Noto Sans Symbols, Symbola, Arial Unicode MS, serif" font-weight="500" fill="{fill}" {extra}>{safe_text(text)}</text>'
 
 def svg_line(x1, y1, x2, y2, color="#222", width=1, opacity=1, extra=""):
     return f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" stroke="{color}" stroke-width="{width}" opacity="{opacity}" {extra}/>'
@@ -184,7 +184,7 @@ def boxes_overlap(a: PlanetNode, b: PlanetNode) -> Tuple[float, float, float]:
         return oy, 0.0, math.copysign(1.0, dy if dy != 0 else 1.0)
     return 0.0, 0.0, 0.0
 
-def force_directed_planet_placement(planets: List[dict], cx: float, cy: float, base_radius: float, min_radius: float, max_radius: float, iterations: int = 220) -> Dict[str, dict]:
+def force_directed_planet_placement(planets: List[dict], cx: float, cy: float, base_radius: float, min_radius: float, max_radius: float, iterations: int = 360) -> Dict[str, dict]:
     nodes = [PlanetNode(p, base_radius) for p in planets]
     for n in nodes:
         n.x, n.y = polar(cx, cy, n.radius, n.angle)
@@ -194,7 +194,7 @@ def force_directed_planet_placement(planets: List[dict], cx: float, cy: float, b
     for node in sorted_nodes:
         if not current:
             current = [node]
-        elif angular_diff(current[-1].true_lon, node.true_lon) < 10:
+        elif angular_diff(current[-1].true_lon, node.true_lon) < 12:
             current.append(node)
         else:
             clusters.append(current)
@@ -206,44 +206,44 @@ def force_directed_planet_placement(planets: List[dict], cx: float, cy: float, b
         if len(cluster) <= 1:
             continue
         center_lon = sum(n.true_lon for n in cluster) / len(cluster)
-        spread = min(46, max(18, len(cluster) * 9.0))
+        spread = min(58, max(24, len(cluster) * 10.5))
         start_lon = center_lon - spread / 2
         for idx, n in enumerate(cluster):
             display_lon = start_lon + idx * (spread / max(len(cluster) - 1, 1))
             n.angle = angle_for_longitude(display_lon)
-            n.radius = base_radius - (idx % 3) * 13
+            n.radius = base_radius - (idx % 4) * 12
             n.x, n.y = polar(cx, cy, n.radius, n.angle)
 
     for _ in range(iterations):
         forces = {n.name: [0.0, 0.0] for n in nodes}
         for n in nodes:
             target_x, target_y = polar(cx, cy, n.target_radius, angle_for_longitude(n.true_lon))
-            forces[n.name][0] += (target_x - n.x) * 0.018
-            forces[n.name][1] += (target_y - n.y) * 0.018
+            forces[n.name][0] += (target_x - n.x) * 0.014
+            forces[n.name][1] += (target_y - n.y) * 0.014
             dx, dy = n.x - cx, n.y - cy
             dist = max(1e-6, math.hypot(dx, dy))
             if dist < min_radius:
-                forces[n.name][0] += (dx / dist) * (min_radius - dist) * 0.22
-                forces[n.name][1] += (dy / dist) * (min_radius - dist) * 0.22
+                forces[n.name][0] += (dx / dist) * (min_radius - dist) * 0.34
+                forces[n.name][1] += (dy / dist) * (min_radius - dist) * 0.34
             elif dist > max_radius:
-                forces[n.name][0] -= (dx / dist) * (dist - max_radius) * 0.22
-                forces[n.name][1] -= (dy / dist) * (dist - max_radius) * 0.22
+                forces[n.name][0] -= (dx / dist) * (dist - max_radius) * 0.34
+                forces[n.name][1] -= (dy / dist) * (dist - max_radius) * 0.34
 
         for i in range(len(nodes)):
             for j in range(i + 1, len(nodes)):
                 a, b = nodes[i], nodes[j]
                 overlap, sxn, syn = boxes_overlap(a, b)
                 if overlap > 0:
-                    push = overlap * 0.38
+                    push = overlap * 0.62
                     forces[a.name][0] += sxn * push
                     forces[a.name][1] += syn * push
                     forces[b.name][0] -= sxn * push
                     forces[b.name][1] -= syn * push
                 ad = angular_diff(a.true_lon, b.true_lon)
-                if ad < 12:
+                if ad < 14:
                     dx, dy = a.x - b.x, a.y - b.y
                     dist = max(1e-6, math.hypot(dx, dy))
-                    push = (12 - ad) * 0.08
+                    push = (14 - ad) * 0.12
                     forces[a.name][0] += dx / dist * push
                     forces[a.name][1] += dy / dist * push
                     forces[b.name][0] -= dx / dist * push
@@ -251,12 +251,12 @@ def force_directed_planet_placement(planets: List[dict], cx: float, cy: float, b
 
         for n in nodes:
             fx, fy = forces[n.name]
-            n.vx = (n.vx + fx) * 0.72
-            n.vy = (n.vy + fy) * 0.72
+            n.vx = (n.vx + fx) * 0.68
+            n.vy = (n.vy + fy) * 0.68
             speed = math.hypot(n.vx, n.vy)
-            if speed > 3.0:
-                n.vx = n.vx / speed * 3.0
-                n.vy = n.vy / speed * 3.0
+            if speed > 2.6:
+                n.vx = n.vx / speed * 2.6
+                n.vy = n.vy / speed * 2.6
             n.x += n.vx
             n.y += n.vy
             dx, dy = n.x - cx, n.y - cy
@@ -264,6 +264,33 @@ def force_directed_planet_placement(planets: List[dict], cx: float, cy: float, b
             clamped = min(max(dist, min_radius), max_radius)
             n.x = cx + dx / dist * clamped
             n.y = cy + dy / dist * clamped
+
+    # Final iterative overlap optimization / multi-ring packing
+    for _ in range(90):
+        moved = False
+        for i in range(len(nodes)):
+            for j in range(i + 1, len(nodes)):
+                a, b = nodes[i], nodes[j]
+                overlap, sxn, syn = boxes_overlap(a, b)
+                if overlap > 0:
+                    moved = True
+                    push = overlap * 0.34 + 0.55
+                    if sxn == 0.0 and syn == 0.0:
+                        dx, dy = a.x - b.x, a.y - b.y
+                        dist = max(1e-6, math.hypot(dx, dy))
+                        sxn, syn = dx / dist, dy / dist
+                    a.x += sxn * push
+                    a.y += syn * push
+                    b.x -= sxn * push
+                    b.y -= syn * push
+                    for n in (a, b):
+                        dx, dy = n.x - cx, n.y - cy
+                        dist = max(1e-6, math.hypot(dx, dy))
+                        clamped = min(max(dist, min_radius), max_radius)
+                        n.x = cx + dx / dist * clamped
+                        n.y = cy + dy / dist * clamped
+        if not moved:
+            break
 
     result = {}
     for n in nodes:
@@ -286,15 +313,17 @@ def calculate_planet_position(julian_day, planet_id):
         return data, "moshier_fallback"
 
 def adaptive_aspect_style(aspects: List[dict], asp: dict) -> Tuple[float, float]:
-    total = len([a for a in aspects if a["aspect"] != "Konjunktion"])
-    if total >= 12:
-        base_w, base_opacity = 0.82, 0.48
-    elif total >= 8:
-        base_w, base_opacity = 0.92, 0.56
+    visible_total = len([a for a in aspects if a["aspect"] != "Konjunktion"])
+    if visible_total >= 14:
+        base_w, base_opacity = 0.74, 0.42
+    elif visible_total >= 9:
+        base_w, base_opacity = 0.84, 0.50
     else:
-        base_w, base_opacity = 1.05, 0.64
+        base_w, base_opacity = 0.98, 0.60
+
+    # Spannungsaspekte bleiben bewusst etwas prägnanter.
     if asp["aspect"] in ("Quadrat", "Opposition"):
-        return base_w + 0.08, min(0.72, base_opacity + 0.06)
+        return base_w + 0.10, min(0.70, base_opacity + 0.08)
     return base_w, base_opacity
 
 def generate_professional_cosmogram_svg(chart, width: int = 1080, height: int = 760):
@@ -311,8 +340,8 @@ def generate_professional_cosmogram_svg(chart, width: int = 1080, height: int = 
     house_ring = sr(183)
     planet_ring = sr(166)
     aspect_ring = sr(124)
-    planet_min_r = sr(144)
-    planet_max_r = sr(184)
+    planet_min_r = sr(136)
+    planet_max_r = sr(194)
     bg, ink, grid, border = "#F7F3EA", "#171717", "#B8B0A1", "#C9B994"
     element_colors = {"Feuer": "#D94A42", "Erde": "#5A8F43", "Luft": "#C99532", "Wasser": "#3E75B8"}
     modality_colors = {"Kardinal": "#D94A42", "Fix": "#3E75B8", "Veränderlich": "#5A8F43"}
@@ -322,7 +351,7 @@ def generate_professional_cosmogram_svg(chart, width: int = 1080, height: int = 
         f'<rect width="100%" height="100%" fill="{bg}"/>',
         '''<defs>
 <filter id="softShadow" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-color="#000" flood-opacity="0.14"/></filter>
-<filter id="planetGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.1" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<filter id="planetGlow" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="0.4" stdDeviation="0.75" flood-color="#000" flood-opacity="0.18"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs>'''
     ]
 
@@ -344,7 +373,7 @@ def generate_professional_cosmogram_svg(chart, width: int = 1080, height: int = 
         x2, y2 = polar(cx, cy, outer, angle)
         svg.append(svg_line(x1, y1, x2, y2, grid, sr(0.8)))
         tx, ty = polar(cx, cy, sr(228), angle_for_longitude(lon + 15))
-        svg.append(svg_symbol(tx, ty + sr(8), glyph, sr(23), fill=color))
+        svg.append(svg_symbol(tx, ty + sr(8), glyph, sr(22), fill=color))
 
     for d in range(360):
         angle = angle_for_longitude(d)
@@ -371,29 +400,35 @@ def generate_professional_cosmogram_svg(chart, width: int = 1080, height: int = 
         x1, y1 = polar(cx, cy, aspect_ring, angle)
         x2, y2 = polar(cx, cy, outer + sr(4), angle)
         tx, ty = polar(cx, cy, outer + sr(15), angle)
-        tx = min(max(tx, sx(390)), sx(1035))
-        ty = min(max(ty, sy(38)), sy(555))
+        tx = min(max(tx, sx(382)), sx(1042))
+        ty = min(max(ty, sy(42)), sy(548))
         svg.append(svg_line(x1, y1, x2, y2, "#111", sr(1.25)))
         svg.append(svg_text(tx, ty + sr(4), label, sr(9.5), anchor="middle", weight="700", fill="#111"))
 
     planet_positions = {p["planet"]: p["longitude"] for p in chart["planets"]}
     aspects_to_draw = [a for a in chart["aspects"] if a["aspect"] != "Konjunktion"]
     aspects_to_draw = sorted(aspects_to_draw, key=lambda a: (a["layer"], -a["orb"]))
+    aspect_layer_radii = {
+        "Opposition": aspect_ring - sr(8.0),
+        "Quadrat": aspect_ring - sr(4.5),
+        "Trigon": aspect_ring + sr(1.5),
+        "Sextil": aspect_ring + sr(5.0),
+    }
     for idx, asp in enumerate(aspects_to_draw):
         lon1, lon2 = planet_positions[asp["p1"]], planet_positions[asp["p2"]]
-        layer_shift = {"Sextil": 0, "Trigon": 2.0, "Quadrat": 4.0, "Opposition": 6.0}.get(asp["aspect"], 0)
-        r = aspect_ring - sr((idx % 4) * 1.25 + layer_shift)
+        base_r = aspect_layer_radii.get(asp["aspect"], aspect_ring)
+        r = base_r - sr((idx % 3) * 0.85)
         x1, y1 = polar(cx, cy, r, angle_for_longitude(lon1))
         x2, y2 = polar(cx, cy, r, angle_for_longitude(lon2))
         width_line, opacity = adaptive_aspect_style(aspects_to_draw, asp)
-        svg.append(svg_line(x1, y1, x2, y2, asp["color"], sr(width_line), opacity))
+        svg.append(svg_line(x1, y1, x2, y2, asp["color"], sr(width_line), opacity, 'stroke-linecap="round"'))
 
-    placements = force_directed_planet_placement(chart["planets"], cx, cy, planet_ring, planet_min_r, planet_max_r, iterations=260)
+    placements = force_directed_planet_placement(chart["planets"], cx, cy, planet_ring, planet_min_r, planet_max_r, iterations=420)
     for p in chart["planets"]:
         placement = placements[p["planet"]]
         px, py = placement["x"], placement["y"]
         _, _, _, _, _, _, deg = sign_data(p["longitude"])
-        svg.append(svg_symbol(px, py, p["glyph"], sr(21), fill="#111"))
+        svg.append(svg_symbol(px, py, p["glyph"], sr(21), fill="#111", extra='filter="url(#planetGlow)"'))
         svg.append(svg_text(px, py + sr(14), deg_to_dms(deg), sr(7.7), anchor="middle", fill="#333"))
         if angular_diff(p["longitude"], placement["display_longitude"]) > 1.6:
             tx, ty = polar(cx, cy, placement["display_radius"] - sr(18), angle_for_longitude(p["longitude"]))
