@@ -1,4 +1,7 @@
 from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlencode
+from uuid import uuid4
 from html import escape
 from typing import Dict, List, Optional, Tuple
 
@@ -6,18 +9,38 @@ import math
 import pytz
 import swisseph as swe
 from fastapi import FastAPI, Response
+from fastapi.staticfiles import StaticFiles
 from geopy.geocoders import Nominatim
 from pydantic import BaseModel
 from timezonefinder import TimezoneFinder
-from urllib.parse import urlencode
 
 try:
     import cairosvg
 except Exception:
     cairosvg = None
 
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+except Exception:
+    A4 = None
+    getSampleStyleSheet = None
+    ParagraphStyle = None
+    cm = None
+    SimpleDocTemplate = None
+    Paragraph = None
+    Spacer = None
+    Image = None
 
-app = FastAPI(title="Astralytica Birth Chart API", version="1.0.0")
+
+BASE_URL = "https://astro-birth-chart-api.onrender.com"
+REPORT_DIR = Path("reports")
+REPORT_DIR.mkdir(exist_ok=True)
+
+app = FastAPI(title="Astralytica Birth Chart API", version="2.0.0")
+app.mount("/reports", StaticFiles(directory=str(REPORT_DIR)), name="reports")
 
 geolocator = Nominatim(user_agent="astralytica_birth_chart_api")
 timezone_finder = TimezoneFinder()
@@ -1011,6 +1034,8 @@ def root():
             "/calculate-birth-chart",
             "/cosmogram.svg",
             "/cosmogram.png",
+            "/generate-chart",
+            "/generate-report-pdf",
         ],
     }
 
@@ -1106,6 +1131,114 @@ def get_cosmogram_png(
     png_bytes = cairosvg.svg2png(bytestring=svg.encode("utf-8"))
     return Response(content=png_bytes, media_type="image/png")
 
+
+
+def chart_image_url(chart, birth_date, birth_time, birth_place, country, width=1080, height=760):
+    query = urlencode(
+        {
+            "birth_date": birth_date,
+            "birth_time": birth_time,
+            "birth_place": birth_place,
+            "country": country,
+            "width": width,
+            "height": height,
+            "latitude": chart["coordinates"]["latitude"],
+            "longitude": chart["coordinates"]["longitude"],
+            "timezone": chart["timezone"],
+        }
+    )
+    return f"{BASE_URL}/cosmogram.png?{query}"
+
+
+def make_analysis_text(chart):
+    asc = chart["ascendant"]
+    mc = chart["mc"]
+    planets = {planet["planet"]: planet for planet in chart["planets"]}
+
+    def planet_line(name):
+        planet = planets[name]
+        house = f", Haus {planet['house']}" if planet.get("house") else ""
+        retrograde = " rückläufig" if planet.get("retrograde") else ""
+        return f"{name}: {planet['sign']} {deg_to_dms(planet['degree'])}{house}{retrograde}"
+
+    aspect_lines = "\n".join(
+        f"- {aspect['p1']} {aspect['aspect']} {aspect['p2']} — Orb {aspect['orb']}°"
+        for aspect in chart["aspects"][:10]
+    )
+
+    return f"""Eingabedaten
+{chart['display_birth']} · {chart['display_place']}
+
+Kurzprofil
+- {planet_line('Sonne')}
+- {planet_line('Mond')}
+- Aszendent: {asc['sign']} {deg_to_dms(asc['degree'])}
+- MC: {mc['sign']} {deg_to_dms(mc['degree'])}
+
+Dominante Struktur
+- Elemente: Feuer {chart['elements']['Feuer']}, Erde {chart['elements']['Erde']}, Luft {chart['elements']['Luft']}, Wasser {chart['elements']['Wasser']}
+- Modalitäten: Kardinal {chart['modalities']['Kardinal']}, Fix {chart['modalities']['Fix']}, Veränderlich {chart['modalities']['Veränderlich']}
+
+Wichtigste Aspekte
+{aspect_lines}
+
+Persönlichkeit & Charakter
+Die Grundstruktur spricht astrologisch für eine Kombination aus {planets['Sonne']['sign']}-Sonne, {planets['Mond']['sign']}-Mond und {asc['sign']}-Aszendent. Daraus ergibt sich ein Profil aus bewusster Grundenergie, emotionaler Reaktionsweise und äußerer Wirkung. Die Häuserpositionen zeigen, in welchen Lebensbereichen diese Faktoren besonders aktiv werden.
+
+Karriere & Berufung
+Der MC in {mc['sign']} beschreibt die berufliche Entwicklungsrichtung. Merkur, Sonne, Saturn und das 10. Haus zeigen, wie Wissen, Verantwortung, Kommunikation, Struktur und langfristige Zielorientierung beruflich umgesetzt werden können. Die Daten sprechen astrologisch für Potenzial in Bereichen, in denen Analyse, Strategie, Kommunikation, Verantwortung und eigenständige Entwicklung verbunden werden.
+
+Geld & Erfolg
+Die Element- und Modalitätsverteilung beschreibt, ob Erfolg eher über Stabilität, Initiative, Anpassung oder Ausdauer entsteht. Die vorhandenen Aspekte zeigen zusätzlich, wo Chancen, Reibung und Wachstumsdruck liegen.
+
+Beziehungen & soziale Dynamik
+Venus, Mond, Aszendent und relevante Aspekte zeigen den Stil von Nähe, Bindung, Kommunikation und sozialer Wirkung. Die Deutung bleibt datenbasiert und nicht deterministisch.
+
+Herausforderungen
+Spannungsaspekte können auf innere Konflikte, Entwicklungsfelder oder wiederkehrende Muster hinweisen. Sie beschreiben keine festen Ereignisse, sondern astrologische Dynamiken.
+
+Zusammenfassung
+Das Horoskop zeigt eine individuelle Gesamtstruktur aus Zeichen, Häusern, Aspekten, Elementen und Modalitäten. Die Analyse basiert ausschließlich auf den berechneten API-Daten.
+"""
+
+
+def create_pdf_report(chart, image_png_bytes):
+    if SimpleDocTemplate is None:
+        return None
+
+    filename = f"astralytica_report_{uuid4().hex}.pdf"
+    pdf_path = REPORT_DIR / filename
+    png_path = REPORT_DIR / f"{filename}.png"
+    png_path.write_bytes(image_png_bytes)
+
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="AstralyticaSmall", parent=styles["Normal"], fontSize=9, leading=12))
+
+    document = SimpleDocTemplate(
+        str(pdf_path),
+        pagesize=A4,
+        rightMargin=1.5 * cm,
+        leftMargin=1.5 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
+    )
+
+    story = [
+        Paragraph("Astralytica AI — Geburtshoroskop", styles["Title"]),
+        Spacer(1, 0.4 * cm),
+        Image(str(png_path), width=17 * cm, height=11.96 * cm),
+        Spacer(1, 0.5 * cm),
+    ]
+
+    for line in make_analysis_text(chart).split("\n"):
+        if line.strip():
+            story.append(Paragraph(escape(line), styles["AstralyticaSmall"]))
+            story.append(Spacer(1, 0.12 * cm))
+
+    document.build(story)
+    return f"{BASE_URL}/reports/{filename}"
+
+
 @app.get("/generate-chart")
 def generate_chart(
     birth_date: str,
@@ -1127,35 +1260,19 @@ def generate_chart(
         longitude=longitude,
         timezone=timezone,
     )
-
     result = build_chart(data)
-
     if not result.get("success"):
         return result
 
-    resolved_latitude = result["coordinates"]["latitude"]
-    resolved_longitude = result["coordinates"]["longitude"]
-    resolved_timezone = result["timezone"]
-
-    query = urlencode({
-        "birth_date": birth_date,
-        "birth_time": birth_time,
-        "birth_place": birth_place,
-        "country": country,
-        "width": width,
-        "height": height,
-        "latitude": resolved_latitude,
-        "longitude": resolved_longitude,
-        "timezone": resolved_timezone,
-    })
-
-    image_url = f"https://astro-birth-chart-api.onrender.com/cosmogram.png?{query}"
+    image_url = chart_image_url(result, birth_date, birth_time, birth_place, country, width, height)
     image_markdown = f"![Kosmogramm]({image_url})"
+    html_embed = f'<img src="{image_url}" alt="Kosmogramm" width="900" />'
 
     return {
         "success": True,
         "image_url": image_url,
         "image_markdown": image_markdown,
+        "html_embed": html_embed,
         "birth_date": birth_date,
         "birth_time": birth_time,
         "birth_place": birth_place,
@@ -1170,3 +1287,42 @@ def generate_chart(
         "elements": result["elements"],
         "modalities": result["modalities"],
     }
+
+
+@app.get("/generate-report-pdf")
+def generate_report_pdf(
+    birth_date: str,
+    birth_time: str,
+    birth_place: str,
+    country: str,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    timezone: Optional[str] = None,
+    width: int = 1080,
+    height: int = 760,
+):
+    if cairosvg is None:
+        return {"success": False, "error": "CairoSVG is not installed."}
+    if SimpleDocTemplate is None:
+        return {"success": False, "error": "ReportLab is not installed."}
+
+    data = BirthData(
+        birth_date=birth_date,
+        birth_time=birth_time,
+        birth_place=birth_place,
+        country=country,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+    )
+    result = build_chart(data)
+    if not result.get("success"):
+        return result
+
+    svg = generate_professional_cosmogram_svg(result, width, height)
+    png_bytes = cairosvg.svg2png(bytestring=svg.encode("utf-8"))
+    pdf_url = create_pdf_report(result, png_bytes)
+    if not pdf_url:
+        return {"success": False, "error": "PDF generation failed."}
+
+    return {"success": True, "pdf_url": pdf_url, "analysis_text": make_analysis_text(result)}
