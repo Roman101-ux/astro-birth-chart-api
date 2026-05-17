@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from geopy.geocoders import Nominatim
 from pydantic import BaseModel
 from timezonefinder import TimezoneFinder
+from fastapi.responses import HTMLResponse
 
 try:
     import cairosvg
@@ -1036,6 +1037,7 @@ def root():
             "/cosmogram.png",
             "/generate-chart",
             "/generate-report-pdf",
+            "/chart-view",
         ],
     }
 
@@ -1313,14 +1315,112 @@ def generate_report_pdf(
         longitude=longitude,
         timezone=timezone,
     )
+
     result = build_chart(data)
+
     if not result.get("success"):
         return result
 
     svg = generate_professional_cosmogram_svg(result, width, height)
     png_bytes = cairosvg.svg2png(bytestring=svg.encode("utf-8"))
+
     pdf_url = create_pdf_report(result, png_bytes)
+
     if not pdf_url:
         return {"success": False, "error": "PDF generation failed."}
 
-    return {"success": True, "pdf_url": pdf_url, "analysis_text": make_analysis_text(result)}
+    return {
+        "success": True,
+        "pdf_url": pdf_url,
+        "analysis_text": make_analysis_text(result),
+    }
+
+
+@app.get("/chart-view", response_class=HTMLResponse)
+def chart_view(
+    birth_date: str,
+    birth_time: str,
+    birth_place: str,
+    country: str,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    timezone: Optional[str] = None,
+    width: int = 1080,
+    height: int = 760,
+):
+    data = BirthData(
+        birth_date=birth_date,
+        birth_time=birth_time,
+        birth_place=birth_place,
+        country=country,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+    )
+
+    result = build_chart(data)
+
+    if not result.get("success"):
+        return (
+            "<h2>Die astronomische Berechnung konnte nicht durchgeführt werden.</h2>"
+            f"<p>{safe_text(result.get('error'))}</p>"
+        )
+
+    image_url = chart_image_url(
+        result,
+        birth_date,
+        birth_time,
+        birth_place,
+        country,
+        width,
+        height,
+    )
+
+    return f"""
+    <!doctype html>
+    <html lang="de">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Astralytica Kosmogramm</title>
+        <style>
+            body {{
+                background: #f7f4ed;
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 30px;
+                color: #222;
+            }}
+            .wrap {{
+                max-width: 1180px;
+                margin: auto;
+            }}
+            .card {{
+                background: #fffdf8;
+                padding: 24px;
+                border-radius: 16px;
+                box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            }}
+            img {{
+                width: 100%;
+                max-width: 1080px;
+                border-radius: 12px;
+                background: white;
+                display: block;
+            }}
+            h1 {{
+                margin-top: 0;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="card">
+                <h1>Kosmogramm</h1>
+                <p>{safe_text(birth_date)} · {safe_text(birth_time)} · {safe_text(birth_place)}, {safe_text(country)}</p>
+                <img src="{image_url}" alt="Kosmogramm">
+            </div>
+        </div>
+    </body>
+    </html>
+    """
