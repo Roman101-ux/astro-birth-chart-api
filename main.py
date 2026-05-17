@@ -1269,8 +1269,8 @@ def generate_chart(
 
     return {
         "success": True,
-        "image_url": image_url,
         "image_markdown": image_markdown,
+        "direct_image_url_for_reference": image_url,
         "birth_date": birth_date,
         "birth_time": birth_time,
         "birth_place": birth_place,
