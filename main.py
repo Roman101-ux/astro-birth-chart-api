@@ -9,6 +9,7 @@ from fastapi import FastAPI, Response
 from geopy.geocoders import Nominatim
 from pydantic import BaseModel
 from timezonefinder import TimezoneFinder
+from urllib.parse import urlencode
 
 try:
     import cairosvg
@@ -1132,26 +1133,29 @@ def generate_chart(
     if not result.get("success"):
         return result
 
-    image_url = (
-        "https://astro-birth-chart-api.onrender.com/cosmogram.png"
-        f"?birth_date={birth_date}"
-        f"&birth_time={birth_time}"
-        f"&birth_place={birth_place}"
-        f"&country={country}"
-        f"&width={width}"
-        f"&height={height}"
-    )
+    resolved_latitude = result["coordinates"]["latitude"]
+    resolved_longitude = result["coordinates"]["longitude"]
+    resolved_timezone = result["timezone"]
 
-    if latitude is not None:
-        image_url += f"&latitude={latitude}"
-    if longitude is not None:
-        image_url += f"&longitude={longitude}"
-    if timezone is not None:
-        image_url += f"&timezone={timezone}"
+    query = urlencode({
+        "birth_date": birth_date,
+        "birth_time": birth_time,
+        "birth_place": birth_place,
+        "country": country,
+        "width": width,
+        "height": height,
+        "latitude": resolved_latitude,
+        "longitude": resolved_longitude,
+        "timezone": resolved_timezone,
+    })
+
+    image_url = f"https://astro-birth-chart-api.onrender.com/cosmogram.png?{query}"
+    image_markdown = f"![Kosmogramm]({image_url})"
 
     return {
         "success": True,
         "image_url": image_url,
+        "image_markdown": image_markdown,
         "birth_date": birth_date,
         "birth_time": birth_time,
         "birth_place": birth_place,
