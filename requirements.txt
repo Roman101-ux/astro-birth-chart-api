@@ -8,3 +8,4 @@ geopy
 svgwrite
 numpy
 CairoSVG
+reportlab
