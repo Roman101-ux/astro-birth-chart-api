@@ -10,10 +10,10 @@ import pytz
 import swisseph as swe
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from geopy.geocoders import Nominatim
 from pydantic import BaseModel
 from timezonefinder import TimezoneFinder
-from fastapi.responses import HTMLResponse
 
 try:
     import cairosvg
@@ -1268,9 +1268,26 @@ def generate_chart(
 
     image_url = chart_image_url(result, birth_date, birth_time, birth_place, country, width, height)
     image_markdown = f"![Kosmogramm]({image_url})"
+    chart_view_url = (
+        f"{BASE_URL}/chart-view?"
+        + urlencode(
+            {
+                "birth_date": birth_date,
+                "birth_time": birth_time,
+                "birth_place": birth_place,
+                "country": country,
+                "width": width,
+                "height": height,
+                "latitude": result["coordinates"]["latitude"],
+                "longitude": result["coordinates"]["longitude"],
+                "timezone": result["timezone"],
+            }
+        )
+    )
 
     return {
         "success": True,
+        "chart_view_url": chart_view_url,
         "image_markdown": image_markdown,
         "direct_image_url_for_reference": image_url,
         "birth_date": birth_date,
@@ -1287,7 +1304,6 @@ def generate_chart(
         "elements": result["elements"],
         "modalities": result["modalities"],
     }
-
 
 @app.get("/generate-report-pdf")
 def generate_report_pdf(
@@ -1315,25 +1331,18 @@ def generate_report_pdf(
         longitude=longitude,
         timezone=timezone,
     )
-
     result = build_chart(data)
-
     if not result.get("success"):
         return result
 
     svg = generate_professional_cosmogram_svg(result, width, height)
     png_bytes = cairosvg.svg2png(bytestring=svg.encode("utf-8"))
-
     pdf_url = create_pdf_report(result, png_bytes)
-
     if not pdf_url:
         return {"success": False, "error": "PDF generation failed."}
 
-    return {
-        "success": True,
-        "pdf_url": pdf_url,
-        "analysis_text": make_analysis_text(result),
-    }
+    return {"success": True, "pdf_url": pdf_url, "analysis_text": make_analysis_text(result)}
+
 
 
 @app.get("/chart-view", response_class=HTMLResponse)
@@ -1357,24 +1366,29 @@ def chart_view(
         longitude=longitude,
         timezone=timezone,
     )
-
     result = build_chart(data)
 
     if not result.get("success"):
         return (
-            "<h2>Die astronomische Berechnung konnte nicht durchgeführt werden.</h2>"
-            f"<p>{safe_text(result.get('error'))}</p>"
+            "<h2>Die astronomische Berechnung konnte nicht zuverlässig durchgeführt werden.</h2>"
+            f"<p>{safe_text(result.get('error', 'Unbekannter Fehler'))}</p>"
         )
 
-    image_url = chart_image_url(
-        result,
-        birth_date,
-        birth_time,
-        birth_place,
-        country,
-        width,
-        height,
+    image_url = chart_image_url(result, birth_date, birth_time, birth_place, country, width, height)
+    pdf_query = urlencode(
+        {
+            "birth_date": birth_date,
+            "birth_time": birth_time,
+            "birth_place": birth_place,
+            "country": country,
+            "width": width,
+            "height": height,
+            "latitude": result["coordinates"]["latitude"],
+            "longitude": result["coordinates"]["longitude"],
+            "timezone": result["timezone"],
+        }
     )
+    pdf_url = f"{BASE_URL}/generate-report-pdf?{pdf_query}"
 
     return f"""
     <!doctype html>
@@ -1391,10 +1405,7 @@ def chart_view(
                 padding: 30px;
                 color: #222;
             }}
-            .wrap {{
-                max-width: 1180px;
-                margin: auto;
-            }}
+            .wrap {{ max-width: 1180px; margin: auto; }}
             .card {{
                 background: #fffdf8;
                 padding: 24px;
@@ -1408,9 +1419,17 @@ def chart_view(
                 background: white;
                 display: block;
             }}
-            h1 {{
-                margin-top: 0;
+            a.button {{
+                display: inline-block;
+                margin: 14px 10px 0 0;
+                padding: 10px 14px;
+                background: #222;
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+                font-size: 14px;
             }}
+            h1 {{ margin-top: 0; }}
         </style>
     </head>
     <body>
@@ -1419,6 +1438,8 @@ def chart_view(
                 <h1>Kosmogramm</h1>
                 <p>{safe_text(birth_date)} · {safe_text(birth_time)} · {safe_text(birth_place)}, {safe_text(country)}</p>
                 <img src="{image_url}" alt="Kosmogramm">
+                <a class="button" href="{image_url}" target="_blank">Bild öffnen</a>
+                <a class="button" href="{pdf_url}" target="_blank">PDF-Report erzeugen</a>
             </div>
         </div>
     </body>
