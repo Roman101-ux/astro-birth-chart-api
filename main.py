@@ -1266,13 +1266,11 @@ def generate_chart(
 
     image_url = chart_image_url(result, birth_date, birth_time, birth_place, country, width, height)
     image_markdown = f"![Kosmogramm]({image_url})"
-    html_embed = f'<img src="{image_url}" alt="Kosmogramm" width="900" />'
 
     return {
         "success": True,
         "image_url": image_url,
         "image_markdown": image_markdown,
-        "html_embed": html_embed,
         "birth_date": birth_date,
         "birth_time": birth_time,
         "birth_place": birth_place,
